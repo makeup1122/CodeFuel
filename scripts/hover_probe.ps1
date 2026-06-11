@@ -36,9 +36,13 @@ public class TrayProbe {
 '@
 Add-Type -TypeDefinition $code
 
-$proc = Get-Process $ProcessName -ErrorAction SilentlyContinue | Select-Object -Last 1
-if (-not $proc) { Write-Output "no $ProcessName process"; exit 1 }
-[TrayProbe]::Find([uint32]$proc.Id)
+# PyInstaller onefile runs as bootstrap parent + real child: scan all of them
+$procs = @(Get-Process $ProcessName -ErrorAction SilentlyContinue)
+if (-not $procs) { Write-Output "no $ProcessName process"; exit 1 }
+foreach ($p in $procs) {
+  [TrayProbe]::Find([uint32]$p.Id)
+  if ([TrayProbe]::trayWnds.Count -gt 0) { break }
+}
 Write-Output "tray windows: $([TrayProbe]::trayWnds -join ', ')  panel: $([TrayProbe]::panelWnd)"
 if ([TrayProbe]::trayWnds.Count -eq 0) { Write-Output "tray window not found"; exit 1 }
 

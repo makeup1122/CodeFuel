@@ -111,13 +111,18 @@ class Panel:
             logger.debug("could not get native hwnd", exc_info=True)
             return None
 
-    def _show_bottom_right_no_activate(self, hwnd: int) -> None:
-        """Position above the tray clock and show WITHOUT stealing focus.
+    def _position_bottom_right(self, hwnd: int) -> None:
+        """Position above the tray clock (and pin topmost) WITHOUT showing.
 
         Uses raw GetWindowRect/SPI_GETWORKAREA/SetWindowPos so every value is
         in the same coordinate space. pywebview's own move() expects logical
         pixels and rescales them, which double-applies the DPI factor and can
         push the panel off-screen on high-DPI displays.
+
+        Showing must go through pywebview's window.show() (the WinForms path):
+        making the form visible with bare SetWindowPos(SWP_SHOWWINDOW) leaves
+        the WebView2 control uncomposited - the form appears blank white even
+        though the page and JS are fully functional.
         """
         import ctypes
         from ctypes import wintypes
@@ -149,12 +154,10 @@ class Panel:
         y = wa.bottom - h - 12
         ok = user32.SetWindowPos(
             hwnd, HWND_TOPMOST, x, y, 0, 0,
-            SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW,
+            SWP_NOSIZE | SWP_NOACTIVATE,
         )
         if not ok:
-            err = ctypes.get_last_error() or ctypes.GetLastError()
-            logger.warning("SetWindowPos failed (err=%s); falling back to window.show()", err)
-            self.window.show()
+            logger.warning("SetWindowPos failed (err=%s)", ctypes.GetLastError())
 
     def show(self) -> None:
         if not self.window:
@@ -163,14 +166,17 @@ class Panel:
         try:
             hwnd = self._native_hwnd()
             if hwnd:
-                logger.debug("panel show: SetWindowPos hwnd=%s", hwnd)
-                self._show_bottom_right_no_activate(hwnd)
-            else:
-                logger.debug("panel show: fallback window.show()")
-                self.window.show()
+                logger.debug("panel show: positioning hwnd=%s", hwnd)
+                self._position_bottom_right(hwnd)
+            self.window.show()
             self._visible = True
             self.push_update(self._state.get_all())
             self.window.evaluate_js("window.__refresh && window.__refresh()")
+            if logger.isEnabledFor(logging.DEBUG):
+                page = self.window.evaluate_js(
+                    "document.readyState + ' | ' + location.href + ' | __render=' + (typeof window.__render)"
+                )
+                logger.debug("panel page state: %s", page)
             logger.debug("panel show: done")
         except Exception:
             logger.exception("failed to show panel")
