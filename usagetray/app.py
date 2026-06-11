@@ -18,7 +18,7 @@ from .poller import Poller
 from .providers import build_providers
 from .single_instance import SingleInstance
 from .state import AppState
-from .ui.hover import HoverController
+from .ui.hover import HoverController, cursor_in_tray_or_panel
 from .ui.panel import Panel
 from .ui.tray import TrayIcon
 
@@ -32,7 +32,7 @@ class UsageTrayApp:
         providers = build_providers(self.config.get("providers"))
         self.poller = Poller(providers, self.state, self.config.get("poll_interval_seconds", 60))
         self.panel = Panel(self.state, on_refresh=self._on_refresh, on_quit=self._on_quit)
-        self.hover = HoverController(self.panel)
+        self.hover = HoverController(self.panel, inside_check=self._hover_inside_check)
         self.tray = TrayIcon(
             on_show_panel=self.panel.show,
             on_refresh=self._on_refresh,
@@ -48,6 +48,12 @@ class UsageTrayApp:
     def _on_state_change(self, snapshots) -> None:
         self.tray.update(snapshots)
         self.panel.push_update(snapshots)
+
+    def _hover_inside_check(self) -> bool:
+        return cursor_in_tray_or_panel(
+            lambda: getattr(self.tray.icon, "_hwnd", None),
+            lambda: self.panel._native_hwnd(),
+        )
 
     def _on_refresh(self) -> None:
         self.poller.refresh_now()
