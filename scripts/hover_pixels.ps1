@@ -14,6 +14,7 @@ public class PixProbe {
   [DllImport("user32.dll")] public static extern bool PostMessageW(IntPtr h, uint msg, IntPtr w, IntPtr l);
   [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r);
   [DllImport("user32.dll")] public static extern bool PrintWindow(IntPtr h, IntPtr hdc, uint flags);
+  [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
   public struct RECT { public int L, T, R, B; }
   public static System.Collections.Generic.List<IntPtr> trayWnds = new System.Collections.Generic.List<IntPtr>();
   public static IntPtr panelWnd = IntPtr.Zero;
@@ -43,6 +44,7 @@ foreach ($p in $procs) {
 }
 if ([PixProbe]::trayWnds.Count -eq 0) { Write-Output "tray window not found"; exit 1 }
 
+$fgBefore = [PixProbe]::GetForegroundWindow()
 # first burst of heartbeats: get the panel shown and positioned
 1..4 | ForEach-Object {
   foreach ($w in [PixProbe]::trayWnds) {
@@ -50,6 +52,10 @@ if ([PixProbe]::trayWnds.Count -eq 0) { Write-Output "tray window not found"; ex
   }
   Start-Sleep -Milliseconds 120
 }
+
+$fgAfter = [PixProbe]::GetForegroundWindow()
+$stolen = ($fgAfter -ne $fgBefore)
+Write-Output "focus stolen by panel: $stolen (fg $fgBefore -> $fgAfter, panel $([PixProbe]::panelWnd))"
 
 $r = New-Object PixProbe+RECT
 [PixProbe]::GetWindowRect([PixProbe]::panelWnd, [ref]$r) | Out-Null

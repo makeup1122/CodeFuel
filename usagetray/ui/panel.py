@@ -82,6 +82,7 @@ class Panel:
         self.window: "webview.Window | None" = None
         self._visible = False
         self.mouse_inside = False
+        self._styles_applied = False
 
     def create_window(self) -> "webview.Window":
         self.window = webview.create_window(
@@ -95,6 +96,7 @@ class Panel:
             on_top=True,
             hidden=True,
             resizable=False,
+            focus=False,  # pywebview sets WS_EX_NOACTIVATE for us
         )
         return self.window
 
@@ -110,6 +112,63 @@ class Panel:
         except Exception:
             logger.debug("could not get native hwnd", exc_info=True)
             return None
+
+    def _apply_widget_styles(self, hwnd: int) -> None:
+        """One-time window styles for hover-widget behaviour.
+
+        WS_EX_NOACTIVATE: showing/clicking the panel never steals keyboard
+        focus from whatever the user is typing in (mouse clicks on the panel's
+        buttons still work; pywebview also sets this via focus=False, kept
+        here as a belt-and-braces guarantee). WS_EX_TOOLWINDOW: keep the
+        widget out of Alt-Tab.
+        """
+        if self._styles_applied:
+            return
+        import ctypes
+        from ctypes import wintypes
+
+        GWL_EXSTYLE = -20
+        WS_EX_NOACTIVATE = 0x08000000
+        WS_EX_TOOLWINDOW = 0x00000080
+
+        user32 = ctypes.windll.user32
+        user32.GetWindowLongPtrW.argtypes = [wintypes.HWND, ctypes.c_int]
+        user32.GetWindowLongPtrW.restype = ctypes.c_longlong
+        user32.SetWindowLongPtrW.argtypes = [wintypes.HWND, ctypes.c_int, ctypes.c_longlong]
+        user32.SetWindowLongPtrW.restype = ctypes.c_longlong
+
+        style = user32.GetWindowLongPtrW(hwnd, GWL_EXSTYLE)
+        user32.SetWindowLongPtrW(
+            hwnd, GWL_EXSTYLE, style | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW
+        )
+        self._styles_applied = True
+        logger.debug("applied WS_EX_NOACTIVATE|WS_EX_TOOLWINDOW")
+
+    def _show_no_activate(self) -> bool:
+        """Show via the WinForms path but WITHOUT pywebview's Activate() call.
+
+        pywebview's window.show() runs ``Show(); Activate()`` and Activate()
+        explicitly steals foreground even from a WS_EX_NOACTIVATE window.
+        Returns False if the .NET interop isn't available so the caller can
+        fall back to window.show().
+        """
+        try:
+            native = getattr(self.window, "native", None)
+            if native is None:
+                return False
+            from System import Func, Type  # pythonnet, already loaded by pywebview
+
+            def _show():
+                native.Show()
+
+            if native.InvokeRequired:
+                native.Invoke(Func[Type](_show))
+            else:
+                _show()
+            return True
+        except Exception:
+            logger.debug("no-activate show failed; falling back", exc_info=True)
+            return False
 
     def _position_bottom_right(self, hwnd: int) -> None:
         """Position above the tray clock (and pin topmost) WITHOUT showing.
@@ -167,8 +226,10 @@ class Panel:
             hwnd = self._native_hwnd()
             if hwnd:
                 logger.debug("panel show: positioning hwnd=%s", hwnd)
+                self._apply_widget_styles(hwnd)
                 self._position_bottom_right(hwnd)
-            self.window.show()
+            if not self._show_no_activate():
+                self.window.show()
             self._visible = True
             self.push_update(self._state.get_all())
             self.window.evaluate_js("window.__refresh && window.__refresh()")
