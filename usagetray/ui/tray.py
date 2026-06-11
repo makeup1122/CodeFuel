@@ -2,8 +2,8 @@
 
 Top bar = Claude (orange), bottom bar = Codex (grey/white). Each bar shows the
 provider's most-utilized metric. >90% -> red. Error -> dimmed grey.
-Tooltip = short summary. Left click -> toggle panel; right menu -> refresh /
-autostart / quit.
+Tooltip = short summary. Hover -> show panel (left click as fallback);
+right menu -> refresh / autostart / quit.
 """
 from __future__ import annotations
 
@@ -18,7 +18,31 @@ from ..models import UsageSnapshot
 
 logger = logging.getLogger("usagetray.tray")
 
+WM_MOUSEMOVE = 0x0200
+
 ICON_SIZE = 64  # drawn large, pystray downscales -> crisper bars
+
+
+class _HoverableIcon(pystray.Icon):
+    """pystray.Icon that also reports cursor hover over the tray icon.
+
+    pystray has no public hover API. On Windows every mouse message for the
+    icon (including WM_MOUSEMOVE, fired repeatedly while the cursor is over
+    it) arrives via ``_on_notify``, so we tap it there before delegating.
+    """
+
+    def __init__(self, *args, on_hover: Callable[[], None] | None = None, **kwargs):
+        self._hover_cb = on_hover
+        super().__init__(*args, **kwargs)
+
+    def _on_notify(self, wparam, lparam):
+        if lparam == WM_MOUSEMOVE and self._hover_cb is not None:
+            logger.debug("tray hover heartbeat")
+            try:
+                self._hover_cb()
+            except Exception:
+                logger.exception("hover callback failed")
+        return super()._on_notify(wparam, lparam)
 BG = (40, 40, 44, 255)
 CLAUDE_COLOR = (217, 119, 87, 255)   # #D97757
 CODEX_COLOR = (220, 220, 224, 255)
@@ -89,25 +113,27 @@ def build_tooltip(claude: UsageSnapshot | None, codex: UsageSnapshot | None) -> 
 class TrayIcon:
     def __init__(
         self,
-        on_toggle_panel: Callable[[], None],
+        on_show_panel: Callable[[], None],
         on_refresh: Callable[[], None],
         on_quit: Callable[[], None],
+        on_hover: Callable[[], None] | None = None,
     ) -> None:
-        self._on_toggle = on_toggle_panel
+        self._on_show = on_show_panel
         self._on_refresh = on_refresh
         self._on_quit = on_quit
         self._claude: UsageSnapshot | None = None
         self._codex: UsageSnapshot | None = None
-        self.icon = pystray.Icon(
+        self.icon = _HoverableIcon(
             "UsageTray",
             icon=render_icon(None, None),
             title="UsageTray",
             menu=self._build_menu(),
+            on_hover=on_hover,
         )
 
     def _build_menu(self) -> pystray.Menu:
         return pystray.Menu(
-            pystray.MenuItem("显示/隐藏面板", self._handle_toggle, default=True),
+            pystray.MenuItem("显示面板", self._handle_show, default=True),
             pystray.MenuItem("立即刷新", self._handle_refresh),
             pystray.MenuItem(
                 "开机自启",
@@ -119,8 +145,8 @@ class TrayIcon:
         )
 
     # menu handlers
-    def _handle_toggle(self, icon, item):
-        self._on_toggle()
+    def _handle_show(self, icon, item):
+        self._on_show()
 
     def _handle_refresh(self, icon, item):
         self._on_refresh()

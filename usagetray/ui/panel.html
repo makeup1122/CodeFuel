@@ -174,6 +174,13 @@
   window.addEventListener('blur', () => {
     if (window.pywebview && pywebview.api && pywebview.api.hide) pywebview.api.hide();
   });
+  // report cursor presence so the hover watchdog keeps the panel open
+  const reportInside = (inside) => {
+    if (window.pywebview && pywebview.api && pywebview.api.set_mouse_inside)
+      pywebview.api.set_mouse_inside(inside);
+  };
+  document.documentElement.addEventListener('mouseenter', () => reportInside(true));
+  document.documentElement.addEventListener('mouseleave', () => reportInside(false));
   window.addEventListener('pywebviewready', () => { window.__refresh(); });
   // re-render reset countdowns every 30s while visible
   setInterval(() => { if (_snaps.length) window.__render(_snaps); }, 30000);

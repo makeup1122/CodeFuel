@@ -1,8 +1,10 @@
 """pywebview panel: frameless window + JS bridge.
 
 The Python ``Api`` is exposed to JS as ``pywebview.api``. On snapshot updates
-Python pushes fresh data via ``evaluate_js``. The window hides on blur and is
-re-shown when the tray icon is clicked.
+Python pushes fresh data via ``evaluate_js``. The window is shown on tray-icon
+hover (HoverController) and hides on blur or when the cursor leaves both the
+tray icon and the panel. All hide paths go through ``Panel.hide()`` so the
+visibility flag stays in sync.
 """
 from __future__ import annotations
 
@@ -35,13 +37,19 @@ def _html_path() -> str:
 
 
 class Api:
-    """Bridge object exposed to the panel JS."""
+    """Bridge object exposed to the panel JS.
+
+    All non-method attributes MUST be underscore-prefixed: pywebview walks the
+    js_api object's public attributes recursively to build the JS bridge, so a
+    public reference back to Panel/Window creates a reference cycle that hangs
+    window creation (generate_js_object recurses forever).
+    """
 
     def __init__(self, state: AppState, on_refresh: Callable[[], None], on_quit: Callable[[], None]):
         self._state = state
         self._on_refresh = on_refresh
         self._on_quit = on_quit
-        self.window: "webview.Window | None" = None
+        self._panel: "Panel | None" = None
 
     def get_snapshots(self) -> list[dict]:
         snaps = self._state.get_all()
@@ -57,19 +65,23 @@ class Api:
         self._on_quit()
 
     def hide(self) -> None:
-        if self.window:
-            try:
-                self.window.hide()
-            except Exception:
-                pass
+        # must go through Panel.hide() to keep the visibility flag in sync
+        if self._panel:
+            self._panel.hide(reason="js-blur")
+
+    def set_mouse_inside(self, inside: bool) -> None:
+        if self._panel:
+            self._panel.mouse_inside = bool(inside)
 
 
 class Panel:
     def __init__(self, state: AppState, on_refresh: Callable[[], None], on_quit: Callable[[], None]):
         self._state = state
         self.api = Api(state, on_refresh, on_quit)
+        self.api._panel = self
         self.window: "webview.Window | None" = None
         self._visible = False
+        self.mouse_inside = False
 
     def create_window(self) -> "webview.Window":
         self.window = webview.create_window(
@@ -84,53 +96,99 @@ class Panel:
             hidden=True,
             resizable=False,
         )
-        self.api.window = self.window
         return self.window
 
     # ---- visibility ---------------------------------------------------------
 
-    def _position_bottom_right(self) -> None:
-        if not self.window:
-            return
+    def _native_hwnd(self) -> int | None:
+        """HWND of the WinForms form backing the pywebview window."""
         try:
-            import ctypes
-            from ctypes import wintypes
-
-            SPI_GETWORKAREA = 0x0030
-            rect = wintypes.RECT()
-            ctypes.windll.user32.SystemParametersInfoW(SPI_GETWORKAREA, 0, ctypes.byref(rect), 0)
-            x = rect.right - WINDOW_W - 12
-            y = rect.bottom - WINDOW_H - 12
-            self.window.move(x, y)
+            native = getattr(self.window, "native", None)
+            if native is None:
+                return None
+            return int(native.Handle.ToInt64())
         except Exception:
-            logger.debug("could not position panel", exc_info=True)
+            logger.debug("could not get native hwnd", exc_info=True)
+            return None
+
+    def _show_bottom_right_no_activate(self, hwnd: int) -> None:
+        """Position above the tray clock and show WITHOUT stealing focus.
+
+        Uses raw GetWindowRect/SPI_GETWORKAREA/SetWindowPos so every value is
+        in the same coordinate space. pywebview's own move() expects logical
+        pixels and rescales them, which double-applies the DPI factor and can
+        push the panel off-screen on high-DPI displays.
+        """
+        import ctypes
+        from ctypes import wintypes
+
+        SPI_GETWORKAREA = 0x0030
+        HWND_TOPMOST = -1
+        SWP_NOSIZE = 0x0001
+        SWP_NOACTIVATE = 0x0010
+        SWP_SHOWWINDOW = 0x0040
+
+        user32 = ctypes.windll.user32
+        # 64-bit HWND args are mangled without explicit prototypes (e.g.
+        # HWND_TOPMOST=-1 is passed as a 32-bit int and the call fails)
+        user32.SetWindowPos.argtypes = [
+            wintypes.HWND, wintypes.HWND,
+            ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+            wintypes.UINT,
+        ]
+        user32.SetWindowPos.restype = wintypes.BOOL
+        user32.GetWindowRect.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.RECT)]
+
+        wa = wintypes.RECT()
+        user32.SystemParametersInfoW(SPI_GETWORKAREA, 0, ctypes.byref(wa), 0)
+        wr = wintypes.RECT()
+        user32.GetWindowRect(hwnd, ctypes.byref(wr))
+        w = wr.right - wr.left
+        h = wr.bottom - wr.top
+        x = wa.right - w - 12
+        y = wa.bottom - h - 12
+        ok = user32.SetWindowPos(
+            hwnd, HWND_TOPMOST, x, y, 0, 0,
+            SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW,
+        )
+        if not ok:
+            err = ctypes.get_last_error() or ctypes.GetLastError()
+            logger.warning("SetWindowPos failed (err=%s); falling back to window.show()", err)
+            self.window.show()
 
     def show(self) -> None:
         if not self.window:
+            logger.warning("show() called before window creation")
             return
         try:
-            self._position_bottom_right()
-            self.window.show()
+            hwnd = self._native_hwnd()
+            if hwnd:
+                logger.debug("panel show: SetWindowPos hwnd=%s", hwnd)
+                self._show_bottom_right_no_activate(hwnd)
+            else:
+                logger.debug("panel show: fallback window.show()")
+                self.window.show()
+            self._visible = True
             self.push_update(self._state.get_all())
             self.window.evaluate_js("window.__refresh && window.__refresh()")
-            self._visible = True
+            logger.debug("panel show: done")
         except Exception:
             logger.exception("failed to show panel")
 
-    def hide(self) -> None:
+    def hide(self, reason: str = "unspecified") -> None:
         if not self.window:
             return
+        logger.debug("panel hide (%s)", reason)
         try:
             self.window.hide()
-            self._visible = False
         except Exception:
             pass
+        self._visible = False
+        self.mouse_inside = False
 
-    def toggle(self) -> None:
-        if self._visible:
-            self.hide()
-        else:
-            self.show()
+    @property
+    def is_visible(self) -> bool:
+        return self._visible
 
     # ---- data push ----------------------------------------------------------
 

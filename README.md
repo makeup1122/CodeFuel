@@ -12,8 +12,10 @@ disk. No API keys to enter, zero configuration.
 - A tray icon with two horizontal bars: top = Claude (orange), bottom = Codex
   (grey). Each bar tracks the provider's most-used limit; it turns red above 90%
   and dims with a hatch pattern when that provider errors.
-- Left-click the icon for a dark popup panel: a card per provider with a
-  progress bar, percentage, and reset countdown for each limit window.
+- Hover over the icon for a dark popup panel: a card per provider with a
+  progress bar, percentage, and reset countdown for each limit window. It
+  hides by itself once the cursor leaves the icon and the panel (left-click
+  also shows it, as a fallback).
 - Right-click menu: **Refresh now**, **Start at login** (off by default),
   **Quit**.
 

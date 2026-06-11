@@ -18,6 +18,7 @@ from .poller import Poller
 from .providers import build_providers
 from .single_instance import SingleInstance
 from .state import AppState
+from .ui.hover import HoverController
 from .ui.panel import Panel
 from .ui.tray import TrayIcon
 
@@ -31,10 +32,12 @@ class UsageTrayApp:
         providers = build_providers(self.config.get("providers"))
         self.poller = Poller(providers, self.state, self.config.get("poll_interval_seconds", 60))
         self.panel = Panel(self.state, on_refresh=self._on_refresh, on_quit=self._on_quit)
+        self.hover = HoverController(self.panel)
         self.tray = TrayIcon(
-            on_toggle_panel=self._on_toggle_panel,
+            on_show_panel=self.panel.show,
             on_refresh=self._on_refresh,
             on_quit=self._on_quit,
+            on_hover=self.hover.on_hover,
         )
         self._quitting = False
         # state changes -> update tray icon + push to panel
@@ -45,9 +48,6 @@ class UsageTrayApp:
     def _on_state_change(self, snapshots) -> None:
         self.tray.update(snapshots)
         self.panel.push_update(snapshots)
-
-    def _on_toggle_panel(self) -> None:
-        self.panel.toggle()
 
     def _on_refresh(self) -> None:
         self.poller.refresh_now()
@@ -92,6 +92,9 @@ class UsageTrayApp:
 
 def main() -> int:
     setup_logging()
+    logger.info(
+        "starting (debug=%s)", logging.getLogger("usagetray").level == logging.DEBUG
+    )
     instance = SingleInstance()
     if instance.already_running():
         logger.info("another instance is running; exiting")
