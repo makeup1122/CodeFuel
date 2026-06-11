@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>UsageTray</title>
+<style>
+  :root {
+    --bg: #1e1e22;
+    --card: #2a2a30;
+    --text: #e8e8ea;
+    --muted: #9a9aa2;
+    --track: #3a3a42;
+    --claude: #d97757;
+    --codex: #c8c8d0;
+    --red: #e04a4a;
+    --border: #34343c;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Segoe UI", system-ui, sans-serif;
+    font-size: 13px;
+    height: 100%;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+  header {
+    padding: 10px 14px 6px;
+    display: flex; align-items: center; justify-content: space-between;
+    -webkit-app-region: drag;
+  }
+  header .title { font-weight: 600; font-size: 13px; letter-spacing: .3px; }
+  header .ver { color: var(--muted); font-size: 11px; }
+  main { flex: 1; overflow-y: auto; padding: 4px 12px; }
+  main::-webkit-scrollbar { width: 6px; }
+  main::-webkit-scrollbar-thumb { background: var(--track); border-radius: 3px; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 12px;
+    margin-bottom: 10px;
+  }
+  .card-head {
+    display: flex; align-items: baseline; justify-content: space-between;
+    margin-bottom: 8px;
+  }
+  .card-head .name { font-weight: 600; }
+  .card-head .name.claude::before { content: "●"; color: var(--claude); margin-right: 6px; }
+  .card-head .name.codex::before { content: "●"; color: var(--codex); margin-right: 6px; }
+  .card-head .updated { color: var(--muted); font-size: 11px; }
+  .metric { margin: 7px 0; }
+  .metric-top { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 3px; }
+  .metric-top .label { color: var(--text); }
+  .metric-top .pct { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .bar { height: 7px; background: var(--track); border-radius: 4px; overflow: hidden; }
+  .bar > span { display: block; height: 100%; border-radius: 4px; transition: width .3s ease; }
+  .bar.claude > span { background: var(--claude); }
+  .bar.codex > span { background: var(--codex); }
+  .bar > span.hot { background: var(--red) !important; }
+  .reset { color: var(--muted); font-size: 11px; margin-top: 2px; }
+  .err {
+    color: #f0b4b4; font-size: 12px; line-height: 1.4;
+    background: rgba(224,74,74,.10); border: 1px solid rgba(224,74,74,.3);
+    border-radius: 6px; padding: 6px 8px;
+  }
+  .stale { color: var(--muted); font-size: 11px; margin-top: 6px; }
+  footer {
+    display: flex; gap: 8px; padding: 8px 12px 12px; border-top: 1px solid var(--border);
+  }
+  button {
+    flex: 1; background: var(--track); color: var(--text); border: none;
+    border-radius: 7px; padding: 7px 0; font-size: 12px; cursor: pointer;
+    font-family: inherit;
+  }
+  button:hover { background: #45454e; }
+  button.quit:hover { background: #5a2f2f; color: #ffb4b4; }
+  .empty { color: var(--muted); text-align: center; padding: 24px 0; }
+</style>
+</head>
+<body>
+  <header>
+    <span class="title">UsageTray</span>
+    <span class="ver">余量</span>
+  </header>
+  <main id="cards"><div class="empty">加载中…</div></main>
+  <footer>
+    <button id="refresh">刷新</button>
+    <button class="quit" id="quit">退出</button>
+  </footer>
+
+<script>
+  function esc(s) {
+    return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  }
+  function relTime(iso) {
+    if (!iso) return '';
+    const t = new Date(iso).getTime();
+    const diff = Math.floor((Date.now() - t) / 1000);
+    if (diff < 5) return '刚刚';
+    if (diff < 60) return diff + ' 秒前';
+    if (diff < 3600) return Math.floor(diff/60) + ' 分钟前';
+    return Math.floor(diff/3600) + ' 小时前';
+  }
+  function resetIn(iso) {
+    if (!iso) return '';
+    let s = Math.floor((new Date(iso).getTime() - Date.now()) / 1000);
+    if (s <= 0) return '即将重置';
+    const d = Math.floor(s/86400); s -= d*86400;
+    const h = Math.floor(s/3600); s -= h*3600;
+    const m = Math.floor(s/60);
+    let parts = [];
+    if (d) parts.push(d + 'd');
+    if (h || d) parts.push(h + 'h');
+    parts.push(m + 'm');
+    return parts.join(' ') + ' 后重置';
+  }
+  function metricRow(m, pid) {
+    const hot = m.used_percent >= 90 ? ' hot' : '';
+    const w = Math.max(0, Math.min(100, m.used_percent));
+    return `<div class="metric">
+      <div class="metric-top"><span class="label">${esc(m.label)}</span>
+        <span class="pct">${m.used_percent.toFixed(0)}%</span></div>
+      <div class="bar ${pid}"><span class="${hot.trim()}" style="width:${w}%"></span></div>
+      <div class="reset">${esc(resetIn(m.resets_at))}</div>
+    </div>`;
+  }
+  // keep last good metrics per provider so an error still shows prior data
+  const lastGood = {};
+  function card(s) {
+    const pid = s.provider_id;
+    let body = '';
+    if (s.error) {
+      body += `<div class="err">${esc(s.error)}</div>`;
+      const prev = lastGood[pid];
+      if (prev && prev.metrics && prev.metrics.length) {
+        body += prev.metrics.map(m => metricRow(m, pid)).join('');
+        body += `<div class="stale">数据来自 ${esc(relTime(prev.fetched_at))}</div>`;
+      }
+    } else {
+      lastGood[pid] = s;
+      if (!s.metrics.length) body += `<div class="empty">无数据</div>`;
+      else body += s.metrics.map(m => metricRow(m, pid)).join('');
+    }
+    const updated = s.error ? '错误' : relTime(s.fetched_at);
+    return `<div class="card">
+      <div class="card-head"><span class="name ${pid}">${esc(s.display_name)}</span>
+        <span class="updated">${esc(updated)}</span></div>
+      ${body}
+    </div>`;
+  }
+  let _snaps = [];
+  window.__render = function(snaps) {
+    _snaps = snaps || [];
+    const el = document.getElementById('cards');
+    if (!_snaps.length) { el.innerHTML = '<div class="empty">无数据</div>'; return; }
+    el.innerHTML = _snaps.map(card).join('');
+  };
+  window.__refresh = function() {
+    if (window.pywebview && pywebview.api) {
+      pywebview.api.get_snapshots().then(window.__render);
+    }
+  };
+  document.getElementById('refresh').addEventListener('click', () => {
+    if (window.pywebview && pywebview.api) pywebview.api.refresh();
+  });
+  document.getElementById('quit').addEventListener('click', () => {
+    if (window.pywebview && pywebview.api) pywebview.api.quit();
+  });
+  // hide on blur (clicking away)
+  window.addEventListener('blur', () => {
+    if (window.pywebview && pywebview.api && pywebview.api.hide) pywebview.api.hide();
+  });
+  window.addEventListener('pywebviewready', () => { window.__refresh(); });
+  // re-render reset countdowns every 30s while visible
+  setInterval(() => { if (_snaps.length) window.__render(_snaps); }, 30000);
+</script>
+</body>
+</html>
