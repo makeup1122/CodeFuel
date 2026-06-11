@@ -1,0 +1,8 @@
+pystray>=0.19
+pywebview>=5.0
+pillow>=10.0
+requests>=2.31
+# dev / test
+pytest>=8.0
+# packaging
+pyinstaller>=6.0
