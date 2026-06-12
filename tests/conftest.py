@@ -26,3 +26,8 @@ def claude_usage() -> dict:
 @pytest.fixture
 def codex_usage() -> dict:
     return load_fixture("codex_usage.json")
+
+
+@pytest.fixture
+def deepseek_balance() -> dict:
+    return load_fixture("deepseek_balance.json")
