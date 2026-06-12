@@ -91,3 +91,65 @@ def test_env_fallback(monkeypatch, deepseek_balance):
     snap = provider.fetch()
     assert snap.ok
     assert captured["auth"] == "Bearer sk-from-env"
+
+
+@pytest.mark.parametrize(
+    "status,needle",
+    [(401, "无效"), (429, "限流"), (500, "服务端"), (503, "服务端"), (418, "返回 418")],
+)
+def test_http_error_codes(monkeypatch, status, needle):
+    provider = DeepSeekProvider(api_key="sk-test")
+    monkeypatch.setattr(ds_mod.requests, "get", lambda *a, **k: FakeResponse(status, {}))
+    snap = provider.fetch()
+    assert not snap.ok
+    assert needle in snap.error
+
+
+def test_timeout(monkeypatch):
+    provider = DeepSeekProvider(api_key="sk-test")
+
+    def boom(*a, **k):
+        raise requests.Timeout()
+
+    monkeypatch.setattr(ds_mod.requests, "get", boom)
+    snap = provider.fetch()
+    assert not snap.ok
+    assert "超时" in snap.error
+
+
+def test_connection_error(monkeypatch):
+    provider = DeepSeekProvider(api_key="sk-test")
+
+    def boom(*a, **k):
+        raise requests.ConnectionError()
+
+    monkeypatch.setattr(ds_mod.requests, "get", boom)
+    snap = provider.fetch()
+    assert not snap.ok
+    assert "网络" in snap.error
+
+
+def test_non_numeric_amount_skipped(monkeypatch):
+    body = {
+        "is_available": True,
+        "balance_infos": [
+            {"currency": "CNY", "total_balance": "oops",
+             "topped_up_balance": "100.00", "granted_balance": "10.00"},
+        ],
+    }
+    provider = DeepSeekProvider(api_key="sk-test")
+    monkeypatch.setattr(ds_mod.requests, "get", lambda *a, **k: FakeResponse(200, body))
+    snap = provider.fetch()
+    assert snap.ok
+    # 坏的 total_balance 被跳过，其余两行保留
+    labels = [m.label for m in snap.metrics]
+    assert "总余额 (¥)" not in labels
+    assert "充值余额 (¥)" in labels
+
+
+def test_no_balance_infos(monkeypatch):
+    provider = DeepSeekProvider(api_key="sk-test")
+    monkeypatch.setattr(ds_mod.requests, "get", lambda *a, **k: FakeResponse(200, {"is_available": False}))
+    snap = provider.fetch()
+    assert not snap.ok
+    assert "解析" in snap.error
