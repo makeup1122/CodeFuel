@@ -14,7 +14,7 @@ APP_NAME = "UsageTray"
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 
 DEFAULTS = {
-    "poll_interval_seconds": 60,
+    "min_fetch_gap_seconds": 60,
     "providers": {"claude": True, "codex": True},
 }
 

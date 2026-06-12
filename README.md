@@ -57,8 +57,10 @@ providers/ --fetch()--> poller (daemon thread) --writes--> state (locked cache)
     memory only and **never written back** to your credentials file.
   - Codex: `GET https://chatgpt.com/backend-api/wham/usage`
     (`Authorization: Bearer`, `ChatGPT-Account-Id`).
-- **poller** polls every 60s (configurable), with per-provider error backoff
-  (60 → 120 → 300s). One provider failing never blocks the other.
+- **poller** fetches on demand only (no periodic polling): once at startup,
+  when the panel is shown (throttled to one fetch per provider per
+  `min_fetch_gap_seconds`), and on manual refresh (bypasses the throttle).
+  One provider failing never blocks the other.
 - **state** is a thread-safe snapshot cache; the UI only reads from it.
 
 ## Configuration
@@ -67,7 +69,7 @@ providers/ --fetch()--> poller (daemon thread) --writes--> state (locked cache)
 
 ```json
 {
-  "poll_interval_seconds": 60,
+  "min_fetch_gap_seconds": 60,
   "providers": { "claude": true, "codex": true }
 }
 ```

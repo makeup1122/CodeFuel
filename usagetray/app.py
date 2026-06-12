@@ -30,8 +30,13 @@ class UsageTrayApp:
         self.config = load_config()
         self.state = AppState()
         providers = build_providers(self.config.get("providers"))
-        self.poller = Poller(providers, self.state, self.config.get("poll_interval_seconds", 60))
-        self.panel = Panel(self.state, on_refresh=self._on_refresh, on_quit=self._on_quit)
+        self.poller = Poller(providers, self.state, self.config.get("min_fetch_gap_seconds", 60))
+        self.panel = Panel(
+            self.state,
+            on_refresh=self._on_refresh,
+            on_quit=self._on_quit,
+            on_shown=self._on_panel_shown,
+        )
         self.hover = HoverController(self.panel, inside_check=self._hover_inside_check)
         self.tray = TrayIcon(
             on_show_panel=self.panel.show,
@@ -56,6 +61,11 @@ class UsageTrayApp:
         )
 
     def _on_refresh(self) -> None:
+        # manual refresh (button / tray menu): bypass the throttle
+        self.poller.refresh_now(force=True)
+
+    def _on_panel_shown(self) -> None:
+        # hover-open: throttled so flapping over the icon doesn't spam the API
         self.poller.refresh_now()
 
     def _on_quit(self) -> None:

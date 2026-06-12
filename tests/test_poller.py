@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-import threading
 import time
 from datetime import datetime, timezone
 
 from usagetray.models import Metric, UsageSnapshot
-from usagetray.poller import BACKOFF_LADDER, Poller
+from usagetray.poller import Poller
 from usagetray.state import AppState
 
 
@@ -24,39 +23,24 @@ class FakeProvider:
         return UsageSnapshot(self.id, self.display_name, [], datetime.now(timezone.utc), "boom")
 
 
-def test_failure_isolation_and_backoff():
+def _wait_for(predicate, timeout=2.0):
+    deadline = time.time() + timeout
+    while not predicate() and time.time() < deadline:
+        time.sleep(0.02)
+    return predicate()
+
+
+def test_failure_isolation():
     good = FakeProvider("good", ok=True)
     bad = FakeProvider("bad", ok=False)
     state = AppState()
-    poller = Poller([good, bad], state, interval=60)
+    poller = Poller([good, bad], state)
 
-    # poll both directly
     poller.poll_provider(good)
     poller.poll_provider(bad)
 
     assert state.get("good").ok
     assert not state.get("bad").ok
-    # good provider unaffected by bad's failure
-    assert poller._failures["good"] == 0
-    assert poller._failures["bad"] == 1
-
-    # backoff ladder: 1 fail -> 60, 2 -> 120, 3 -> 300, capped
-    assert poller._backoff_for(1) == BACKOFF_LADDER[0]
-    assert poller._backoff_for(2) == BACKOFF_LADDER[1]
-    assert poller._backoff_for(3) == BACKOFF_LADDER[2]
-    assert poller._backoff_for(10) == BACKOFF_LADDER[-1]
-
-
-def test_backoff_resets_on_success():
-    p = FakeProvider("p", ok=False)
-    state = AppState()
-    poller = Poller([p], state, interval=60)
-    poller.poll_provider(p)
-    poller.poll_provider(p)
-    assert poller._failures["p"] == 2
-    p.ok = True
-    poller.poll_provider(p)
-    assert poller._failures["p"] == 0
 
 
 def test_state_callback_invoked():
@@ -64,28 +48,53 @@ def test_state_callback_invoked():
     state = AppState()
     seen = []
     state.subscribe(lambda snaps: seen.append(set(snaps.keys())))
-    poller = Poller([p], state, interval=60)
+    poller = Poller([p], state)
     poller.poll_provider(p)
     assert seen and "p" in seen[-1]
 
 
-def test_refresh_now_wakes_thread():
+def test_no_fetch_without_request():
     p = FakeProvider("p")
-    state = AppState()
-    poller = Poller([p], state, interval=3600)  # long interval
+    poller = Poller([p], AppState(), min_gap=0)
     poller.start()
     try:
-        # wait for the initial poll
-        deadline = time.time() + 2
-        while p.calls < 1 and time.time() < deadline:
-            time.sleep(0.02)
-        assert p.calls >= 1
-        before = p.calls
+        time.sleep(0.3)
+        assert p.calls == 0  # nothing happens until refresh_now()
         poller.refresh_now()
-        deadline = time.time() + 2
-        while p.calls <= before and time.time() < deadline:
-            time.sleep(0.02)
-        assert p.calls > before
+        assert _wait_for(lambda: p.calls == 1)
+    finally:
+        poller.stop()
+
+
+def test_refresh_is_throttled_by_min_gap():
+    p = FakeProvider("p")
+    poller = Poller([p], AppState(), min_gap=3600)
+    poller.start()
+    try:
+        poller.refresh_now()
+        assert _wait_for(lambda: p.calls == 1)
+        # within the gap: throttled, no second fetch
+        poller.refresh_now()
+        time.sleep(0.3)
+        assert p.calls == 1
+        # force bypasses the throttle
+        poller.refresh_now(force=True)
+        assert _wait_for(lambda: p.calls == 2)
+    finally:
+        poller.stop()
+
+
+def test_failed_provider_not_auto_retried():
+    p = FakeProvider("p", ok=False)
+    poller = Poller([p], AppState(), min_gap=0)
+    poller.start()
+    try:
+        poller.refresh_now()
+        assert _wait_for(lambda: p.calls == 1)
+        time.sleep(0.3)
+        assert p.calls == 1  # no automatic retry after failure
+        poller.refresh_now()
+        assert _wait_for(lambda: p.calls == 2)  # retried on next request
     finally:
         poller.stop()
 
@@ -98,13 +107,12 @@ def test_provider_exception_does_not_crash_loop():
         def fetch(self):
             raise RuntimeError("kaboom")
 
-    state = AppState()
-    poller = Poller([Exploding()], state, interval=60)
-    # poll_provider calls fetch() which raises; the run-loop guards it, but
-    # poll_provider itself does not. Simulate the loop's guard:
+    ok = FakeProvider("p")
+    poller = Poller([Exploding(), ok], AppState(), min_gap=0)
+    poller.start()
     try:
-        poller.poll_provider(Exploding())
-    except RuntimeError:
-        pass  # the loop catches this; here we just confirm it propagates from fetch
-    # The real providers never raise; this documents the loop-level safety net.
-    assert poller._failures["x"] == 0
+        poller.refresh_now()
+        # the exploding provider is caught by the loop; the healthy one still runs
+        assert _wait_for(lambda: ok.calls == 1)
+    finally:
+        poller.stop()

@@ -1,8 +1,11 @@
-"""Background polling thread with per-provider error backoff.
+"""On-demand fetch thread (no periodic polling).
 
-Each provider is polled on its own schedule. A provider that keeps failing
-backs off (60 -> 120 -> 300s, capped) without affecting the others. A manual
-refresh wakes the thread to poll everything immediately.
+Providers are fetched only when a refresh is requested: once at startup,
+whenever the panel is shown, or via the manual refresh button / tray menu.
+Panel-open refreshes are throttled per provider (``min_gap`` seconds) so
+hover flapping does not hammer the rate-limited usage endpoints; forced
+refreshes (the refresh button) bypass the throttle. There is no automatic
+retry - a failed provider is simply retried on the next refresh request.
 """
 from __future__ import annotations
 
@@ -16,7 +19,7 @@ from .state import AppState
 
 logger = logging.getLogger("usagetray.poller")
 
-BACKOFF_LADDER = [60, 120, 300]  # seconds; index by min(failures-1, last)
+MIN_GAP_SECONDS = 60
 
 
 class Poller:
@@ -24,17 +27,18 @@ class Poller:
         self,
         providers: list[Provider],
         state: AppState,
-        interval: int = 60,
+        min_gap: int = MIN_GAP_SECONDS,
     ) -> None:
         self._providers = providers
         self._state = state
-        self._interval = max(5, int(interval))
+        self._min_gap = max(0, int(min_gap))
         self._wake = threading.Event()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
-        # per-provider scheduling
-        self._next_due: dict[str, float] = {p.id: 0.0 for p in providers}
-        self._failures: dict[str, int] = {p.id: 0 for p in providers}
+        self._lock = threading.Lock()
+        self._pending: set[str] = set()
+        # monotonic timestamp of the last fetch attempt per provider
+        self._last_fetch: dict[str, float] = {p.id: -float("inf") for p in providers}
 
     # ---- lifecycle -----------------------------------------------------------
 
@@ -51,56 +55,49 @@ class Poller:
         if self._thread:
             self._thread.join(timeout=2.0)
 
-    def refresh_now(self) -> None:
-        """Force every provider due immediately and wake the loop."""
+    def refresh_now(self, force: bool = False) -> None:
+        """Request a fetch of every provider.
+
+        ``force=False`` (panel shown) skips providers fetched within the last
+        ``min_gap`` seconds; ``force=True`` (refresh button) fetches them all.
+        """
         now = time.monotonic()
-        for pid in self._next_due:
-            self._next_due[pid] = now
-        self._wake.set()
+        queued = False
+        with self._lock:
+            for provider in self._providers:
+                if force or now - self._last_fetch[provider.id] >= self._min_gap:
+                    self._pending.add(provider.id)
+                    queued = True
+        if queued:
+            self._wake.set()
 
     # ---- internals -----------------------------------------------------------
 
-    def _backoff_for(self, failures: int) -> int:
-        if failures <= 0:
-            return self._interval
-        idx = min(failures - 1, len(BACKOFF_LADDER) - 1)
-        return BACKOFF_LADDER[idx]
-
     def poll_provider(self, provider: Provider) -> None:
-        """Fetch one provider, update state, and reschedule with backoff."""
+        """Fetch one provider and update state."""
+        self._last_fetch[provider.id] = time.monotonic()
         snapshot = provider.fetch()
         if snapshot.fetched_at is None:
             snapshot.fetched_at = datetime.now(timezone.utc)
         self._state.update(snapshot)
-
-        if snapshot.ok:
-            self._failures[provider.id] = 0
-            delay = self._interval
-        else:
-            self._failures[provider.id] += 1
-            delay = self._backoff_for(self._failures[provider.id])
-            logger.warning("provider %s failed: %s (next in %ss)", provider.id, snapshot.error, delay)
-        self._next_due[provider.id] = time.monotonic() + delay
+        if not snapshot.ok:
+            logger.warning("provider %s failed: %s", provider.id, snapshot.error)
 
     def _run(self) -> None:
         while not self._stop.is_set():
-            now = time.monotonic()
-            soonest = now + self._interval
+            self._wake.wait()
+            if self._stop.is_set():
+                return
+            self._wake.clear()
+            with self._lock:
+                pending = set(self._pending)
+                self._pending.clear()
             for provider in self._providers:
                 if self._stop.is_set():
                     return
-                if now >= self._next_due.get(provider.id, 0.0):
-                    try:
-                        self.poll_provider(provider)
-                    except Exception:  # top-level safety net
-                        logger.exception("unexpected error polling %s", provider.id)
-                        self._failures[provider.id] += 1
-                        self._next_due[provider.id] = time.monotonic() + self._backoff_for(
-                            self._failures[provider.id]
-                        )
-                soonest = min(soonest, self._next_due.get(provider.id, soonest))
-
-            wait = max(0.0, soonest - time.monotonic())
-            woke = self._wake.wait(timeout=wait)
-            if woke:
-                self._wake.clear()
+                if provider.id not in pending:
+                    continue
+                try:
+                    self.poll_provider(provider)
+                except Exception:  # top-level safety net
+                    logger.exception("unexpected error polling %s", provider.id)

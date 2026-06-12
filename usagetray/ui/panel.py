@@ -22,8 +22,26 @@ from ..state import AppState
 
 logger = logging.getLogger("usagetray.panel")
 
-WINDOW_W = 360
-WINDOW_H = 320
+WINDOW_W = 400          # CSS px; physical size derives from per-window DPI
+WINDOW_H = 320          # initial height only; show() auto-fits to content
+MAX_CSS_HEIGHT = 900    # sanity cap before workarea clamping
+
+# Natural content height in CSS px (body is locked to 100vh, so measure the
+# parts) plus the current viewport size. The caller derives the CSS-to-window
+# pixel ratio from viewport vs window rect - WebView2 zooms to the real
+# monitor DPI even when our process is DPI-virtualized, so no fixed factor
+# (GetDpiForWindow or devicePixelRatio alone) is reliable.
+MEASURE_JS = (
+    "(function(){"
+    "var q=function(s){return document.querySelector(s)};"
+    "var h=q('header'),m=q('main'),f=q('footer');"
+    "if(!h||!m||!f){return null;}"
+    "var fr=f.getBoundingClientRect();"
+    "return {c: h.offsetHeight + m.scrollHeight + f.offsetHeight + 4,"
+    "        vh: window.innerHeight, vw: window.innerWidth,"
+    "        fb: fr.bottom, dpr: window.devicePixelRatio};"
+    "})()"
+)
 
 
 def _html_path() -> str:
@@ -75,8 +93,15 @@ class Api:
 
 
 class Panel:
-    def __init__(self, state: AppState, on_refresh: Callable[[], None], on_quit: Callable[[], None]):
+    def __init__(
+        self,
+        state: AppState,
+        on_refresh: Callable[[], None],
+        on_quit: Callable[[], None],
+        on_shown: Callable[[], None] | None = None,
+    ):
         self._state = state
+        self._on_shown = on_shown
         self.api = Api(state, on_refresh, on_quit)
         self.api._panel = self
         self.window: "webview.Window | None" = None
@@ -170,15 +195,16 @@ class Panel:
             logger.debug("no-activate show failed; falling back", exc_info=True)
             return False
 
-    def _position_bottom_right(self, hwnd: int) -> None:
-        """Position above the tray clock (and pin topmost) WITHOUT showing.
+    def _apply_bounds(self, hwnd: int, measure: dict | None) -> None:
+        """Size to content and position above the tray clock WITHOUT showing.
 
         Uses raw GetWindowRect/SPI_GETWORKAREA/SetWindowPos so every value is
-        in the same coordinate space. pywebview's own move() expects logical
-        pixels and rescales them, which double-applies the DPI factor and can
-        push the panel off-screen on high-DPI displays.
+        in the same coordinate space. pywebview's own move()/resize() expect
+        logical pixels and rescale them (double-applying the DPI factor on
+        high-DPI displays), and resize() additionally passes SWP_SHOWWINDOW
+        without SWP_NOACTIVATE, which would steal focus.
 
-        Showing must go through pywebview's window.show() (the WinForms path):
+        Showing must go through the WinForms path (_show_no_activate):
         making the form visible with bare SetWindowPos(SWP_SHOWWINDOW) leaves
         the WebView2 control uncomposited - the form appears blank white even
         though the page and JS are fully functional.
@@ -190,7 +216,6 @@ class Panel:
         HWND_TOPMOST = -1
         SWP_NOSIZE = 0x0001
         SWP_NOACTIVATE = 0x0010
-        SWP_SHOWWINDOW = 0x0040
 
         user32 = ctypes.windll.user32
         # 64-bit HWND args are mangled without explicit prototypes (e.g.
@@ -207,14 +232,30 @@ class Panel:
         user32.SystemParametersInfoW(SPI_GETWORKAREA, 0, ctypes.byref(wa), 0)
         wr = wintypes.RECT()
         user32.GetWindowRect(hwnd, ctypes.byref(wr))
-        w = wr.right - wr.left
-        h = wr.bottom - wr.top
+        cur_w = wr.right - wr.left
+        cur_h = wr.bottom - wr.top
+
+        flags = SWP_NOACTIVATE
+        w, h = cur_w, cur_h
+        try:
+            content = float(measure["c"])
+            vh = float(measure["vh"])
+            vw = float(measure["vw"])
+            ratio = cur_h / vh  # window px per CSS px (zoom + chrome combined)
+            if content > 0 and ratio > 0:
+                # delta correction: chrome offset between outer rect and
+                # viewport is constant, so adjust relative to current size
+                target = min(content, MAX_CSS_HEIGHT)
+                h = int(round(cur_h + (target - vh) * ratio))
+                w = int(round(cur_w + (WINDOW_W - vw) * ratio))
+                h = min(h, wa.bottom - wa.top - 24)  # never taller than workarea
+            else:
+                flags |= SWP_NOSIZE
+        except (TypeError, KeyError, ValueError, ZeroDivisionError):
+            flags |= SWP_NOSIZE  # measurement failed: keep current size
         x = wa.right - w - 12
         y = wa.bottom - h - 12
-        ok = user32.SetWindowPos(
-            hwnd, HWND_TOPMOST, x, y, 0, 0,
-            SWP_NOSIZE | SWP_NOACTIVATE,
-        )
+        ok = user32.SetWindowPos(hwnd, HWND_TOPMOST, x, y, w, h, flags)
         if not ok:
             logger.warning("SetWindowPos failed (err=%s)", ctypes.GetLastError())
 
@@ -222,17 +263,45 @@ class Panel:
         if not self.window:
             logger.warning("show() called before window creation")
             return
+        if self._on_shown:
+            try:
+                # kick off an async (throttled) fetch; fresh data lands via
+                # the state-change callback -> push_update once it arrives
+                self._on_shown()
+            except Exception:
+                logger.debug("on_shown callback failed", exc_info=True)
         try:
+            # render data first (window may still be hidden) so the content
+            # height measured below is current
+            self.push_update(self._state.get_all())
+            self.window.evaluate_js("window.__refresh && window.__refresh()")
             hwnd = self._native_hwnd()
             if hwnd:
-                logger.debug("panel show: positioning hwnd=%s", hwnd)
                 self._apply_widget_styles(hwnd)
-                self._position_bottom_right(hwnd)
+                # fit window to content iteratively: chrome offsets and the
+                # WebView2 zoom factor make any single-pass conversion drift,
+                # so re-measure after each adjustment until viewport == content
+                for attempt in range(3):
+                    try:
+                        measure = self.window.evaluate_js(MEASURE_JS)
+                    except Exception:
+                        logger.debug("content measurement failed", exc_info=True)
+                        measure = None
+                    logger.debug(
+                        "panel show: bounds pass %s hwnd=%s measure=%s",
+                        attempt, hwnd, measure,
+                    )
+                    self._apply_bounds(hwnd, measure)
+                    if not measure:
+                        break
+                    try:
+                        if abs(float(measure["c"]) - float(measure["vh"])) <= 2:
+                            break
+                    except (TypeError, KeyError, ValueError):
+                        break
             if not self._show_no_activate():
                 self.window.show()
             self._visible = True
-            self.push_update(self._state.get_all())
-            self.window.evaluate_js("window.__refresh && window.__refresh()")
             if logger.isEnabledFor(logging.DEBUG):
                 page = self.window.evaluate_js(
                     "document.readyState + ' | ' + location.href + ' | __render=' + (typeof window.__render)"
