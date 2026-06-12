@@ -13,17 +13,24 @@ class Metric:
     """A single limit window for a provider.
 
     ``used_percent`` is 0-100. ``resets_at`` is UTC (tz-aware) or None.
+    ``kind`` is "percent" (progress bar) or "amount" (text like a balance);
+    amount metrics carry their display string in ``text`` and ignore
+    ``used_percent``.
     """
 
     label: str
     used_percent: float
     resets_at: datetime | None = None
+    kind: str = "percent"
+    text: str | None = None
 
     def to_dict(self) -> dict:
         return {
             "label": self.label,
             "used_percent": round(self.used_percent, 1),
             "resets_at": self.resets_at.isoformat() if self.resets_at else None,
+            "kind": self.kind,
+            "text": self.text,
         }
 
 
