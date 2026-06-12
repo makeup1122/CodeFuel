@@ -29,7 +29,10 @@ class UsageTrayApp:
     def __init__(self) -> None:
         self.config = load_config()
         self.state = AppState()
-        providers = build_providers(self.config.get("providers"))
+        providers = build_providers(
+            self.config.get("providers"),
+            self.config.get("deepseek_api_key", ""),
+        )
         self.poller = Poller(providers, self.state, self.config.get("min_fetch_gap_seconds", 60))
         self.panel = Panel(
             self.state,
