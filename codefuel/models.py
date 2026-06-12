@@ -7,6 +7,23 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 
+DEFAULT_COOLDOWN_SECONDS = 120.0
+
+
+def parse_retry_after(value, default: float = DEFAULT_COOLDOWN_SECONDS) -> float:
+    """Parse an HTTP ``Retry-After`` header value into seconds.
+
+    Accepts an integer/float number of seconds. HTTP-date forms are not parsed
+    (rare for these APIs) and fall back to ``default``, as does a missing value.
+    """
+    if value is None:
+        return default
+    try:
+        secs = float(value)
+    except (TypeError, ValueError):
+        return default
+    return secs if secs >= 0 else default
+
 
 @dataclass
 class Metric:
@@ -47,6 +64,9 @@ class UsageSnapshot:
     metrics: list[Metric] = field(default_factory=list)
     fetched_at: datetime | None = None
     error: str | None = None
+    # On a rate-limit (429), how long to back off before retrying this
+    # provider — even on a forced refresh. None for non-429 results.
+    retry_after_seconds: float | None = None
 
     @property
     def ok(self) -> bool:

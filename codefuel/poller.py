@@ -4,8 +4,11 @@ Providers are fetched only when a refresh is requested: once at startup,
 whenever the panel is shown, or via the manual refresh button / tray menu.
 Panel-open refreshes are throttled per provider (``min_gap`` seconds) so
 hover flapping does not hammer the rate-limited usage endpoints; forced
-refreshes (the refresh button) bypass the throttle. There is no automatic
-retry - a failed provider is simply retried on the next refresh request.
+refreshes (the refresh button) bypass that throttle. A 429 puts the provider
+on a cooldown (its ``Retry-After``, else 120s) during which it is skipped
+even by a forced refresh, so the refresh button can't pile onto a rate limit.
+Otherwise there is no automatic retry - a failed provider is retried on the
+next refresh request.
 """
 from __future__ import annotations
 
@@ -39,6 +42,9 @@ class Poller:
         self._pending: set[str] = set()
         # monotonic timestamp of the last fetch attempt per provider
         self._last_fetch: dict[str, float] = {p.id: -float("inf") for p in providers}
+        # monotonic deadline until which a provider is on a 429 cooldown and
+        # must not be fetched — not even by a forced refresh.
+        self._cooldown_until: dict[str, float] = {p.id: 0.0 for p in providers}
 
     # ---- lifecycle -----------------------------------------------------------
 
@@ -65,6 +71,8 @@ class Poller:
         queued = False
         with self._lock:
             for provider in self._providers:
+                if now < self._cooldown_until[provider.id]:
+                    continue  # 429 cooldown — even a forced refresh waits it out
                 if force or now - self._last_fetch[provider.id] >= self._min_gap:
                     self._pending.add(provider.id)
                     queued = True
@@ -80,7 +88,15 @@ class Poller:
         if snapshot.fetched_at is None:
             snapshot.fetched_at = datetime.now(timezone.utc)
         self._state.update(snapshot)
-        if not snapshot.ok:
+        if snapshot.retry_after_seconds:
+            self._cooldown_until[provider.id] = (
+                time.monotonic() + snapshot.retry_after_seconds
+            )
+            logger.warning(
+                "provider %s rate-limited; cooling down %ss",
+                provider.id, snapshot.retry_after_seconds,
+            )
+        elif not snapshot.ok:
             logger.warning("provider %s failed: %s", provider.id, snapshot.error)
 
     def _run(self) -> None:

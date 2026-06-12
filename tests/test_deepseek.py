@@ -8,10 +8,11 @@ from codefuel.providers.deepseek import DeepSeekProvider
 
 
 class FakeResponse:
-    def __init__(self, status_code=200, json_body=None, raise_json=False):
+    def __init__(self, status_code=200, json_body=None, raise_json=False, headers=None):
         self.status_code = status_code
         self._json = json_body
         self._raise_json = raise_json
+        self.headers = headers or {}
 
     def json(self):
         if self._raise_json:
@@ -175,3 +176,29 @@ def test_build_providers_passes_timeout():
     assert providers["claude"]._timeout == 7
     assert providers["codex"]._timeout == 7
     assert providers["deepseek"]._timeout == 7
+
+
+def test_429_retry_after_from_header(monkeypatch):
+    provider = DeepSeekProvider(api_key="sk-test")
+    monkeypatch.setattr(
+        ds_mod.requests, "get",
+        lambda *a, **k: FakeResponse(429, {}, headers={"Retry-After": "45"}),
+    )
+    snap = provider.fetch()
+    assert not snap.ok
+    assert snap.retry_after_seconds == 45
+
+
+def test_429_retry_after_default_when_missing(monkeypatch):
+    provider = DeepSeekProvider(api_key="sk-test")
+    monkeypatch.setattr(ds_mod.requests, "get", lambda *a, **k: FakeResponse(429, {}))
+    snap = provider.fetch()
+    assert snap.retry_after_seconds == 120  # DEFAULT_COOLDOWN_SECONDS
+
+
+def test_non_429_has_no_retry_after(monkeypatch, deepseek_balance):
+    provider = DeepSeekProvider(api_key="sk-test")
+    monkeypatch.setattr(ds_mod.requests, "get", lambda *a, **k: FakeResponse(200, deepseek_balance))
+    snap = provider.fetch()
+    assert snap.ok
+    assert snap.retry_after_seconds is None

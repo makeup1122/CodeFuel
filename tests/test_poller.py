@@ -9,10 +9,11 @@ from codefuel.state import AppState
 
 
 class FakeProvider:
-    def __init__(self, pid, ok=True):
+    def __init__(self, pid, ok=True, retry_after=None):
         self.id = pid
         self.display_name = pid
         self.ok = ok
+        self.retry_after = retry_after
         self.calls = 0
 
     def fetch(self):
@@ -20,7 +21,8 @@ class FakeProvider:
         if self.ok:
             return UsageSnapshot(self.id, self.display_name, [Metric("m", 10.0)],
                                  datetime.now(timezone.utc), None)
-        return UsageSnapshot(self.id, self.display_name, [], datetime.now(timezone.utc), "boom")
+        return UsageSnapshot(self.id, self.display_name, [], datetime.now(timezone.utc),
+                             "boom", retry_after_seconds=self.retry_after)
 
 
 def _wait_for(predicate, timeout=2.0):
@@ -116,3 +118,29 @@ def test_provider_exception_does_not_crash_loop():
         assert _wait_for(lambda: ok.calls == 1)
     finally:
         poller.stop()
+
+
+def test_429_sets_cooldown_and_blocks_forced_refresh():
+    p = FakeProvider("p", ok=False, retry_after=300)
+    poller = Poller([p], AppState(), min_gap=0)
+    poller.poll_provider(p)  # 429 -> 300s cooldown
+    assert poller._cooldown_until["p"] > time.monotonic() + 100
+    poller.refresh_now(force=True)  # forced, but cooldown wins
+    assert "p" not in poller._pending
+
+
+def test_cooldown_expired_allows_fetch():
+    p = FakeProvider("p", ok=False, retry_after=0.05)
+    poller = Poller([p], AppState(), min_gap=0)
+    poller.poll_provider(p)
+    time.sleep(0.08)
+    poller.refresh_now(force=True)
+    assert "p" in poller._pending  # cooldown elapsed -> queued again
+
+
+def test_plain_failure_does_not_set_cooldown():
+    p = FakeProvider("p", ok=False)  # error but no retry_after
+    poller = Poller([p], AppState(), min_gap=0)
+    poller.poll_provider(p)
+    poller.refresh_now(force=True)
+    assert "p" in poller._pending  # non-429 failures don't block

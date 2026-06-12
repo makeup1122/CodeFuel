@@ -23,7 +23,7 @@ from pathlib import Path
 
 import requests
 
-from ..models import Metric, UsageSnapshot
+from ..models import Metric, UsageSnapshot, parse_retry_after
 
 USAGE_URL = "https://chatgpt.com/backend-api/wham/usage"
 TIMEOUT = 10
@@ -81,13 +81,14 @@ class CodexProvider:
             return {}
         return tokens
 
-    def _err(self, message: str) -> UsageSnapshot:
+    def _err(self, message: str, retry_after: float | None = None) -> UsageSnapshot:
         return UsageSnapshot(
             provider_id=self.id,
             display_name=self.display_name,
             metrics=[],
             fetched_at=datetime.now(timezone.utc),
             error=message,
+            retry_after_seconds=retry_after,
         )
 
     def _parse(self, body: dict) -> list[Metric]:
@@ -141,7 +142,10 @@ class CodexProvider:
         if resp.status_code in (401, 403):
             return self._err("登录已过期，请在终端运行 codex 并完成登录刷新。")
         if resp.status_code == 429:
-            return self._err("接口限流（429），稍后重试。")
+            return self._err(
+                "接口限流（429），稍后重试。",
+                retry_after=parse_retry_after(resp.headers.get("Retry-After")),
+            )
         if resp.status_code >= 500:
             return self._err(f"服务端错误（{resp.status_code}），稍后重试。")
         if resp.status_code != 200:

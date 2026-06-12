@@ -23,7 +23,7 @@ from pathlib import Path
 
 import requests
 
-from ..models import Metric, UsageSnapshot
+from ..models import Metric, UsageSnapshot, parse_retry_after
 
 USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
 TOKEN_URL = "https://console.anthropic.com/v1/oauth/token"
@@ -84,13 +84,14 @@ class ClaudeProvider:
             return {}
         return oauth
 
-    def _err(self, message: str) -> UsageSnapshot:
+    def _err(self, message: str, retry_after: float | None = None) -> UsageSnapshot:
         return UsageSnapshot(
             provider_id=self.id,
             display_name=self.display_name,
             metrics=[],
             fetched_at=datetime.now(timezone.utc),
             error=message,
+            retry_after_seconds=retry_after,
         )
 
     # ---- HTTP ----------------------------------------------------------------
@@ -201,7 +202,10 @@ class ClaudeProvider:
         if resp.status_code == 401:
             return self._err("登录已过期，请在终端运行一次 claude 以刷新登录。")
         if resp.status_code == 429:
-            return self._err("接口限流（429），稍后重试。")
+            return self._err(
+                "接口限流（429），稍后重试。",
+                retry_after=parse_retry_after(resp.headers.get("Retry-After")),
+            )
         if resp.status_code >= 500:
             return self._err(f"服务端错误（{resp.status_code}），稍后重试。")
         if resp.status_code != 200:
