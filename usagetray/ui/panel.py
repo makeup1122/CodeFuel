@@ -111,7 +111,7 @@ class Panel:
 
     def create_window(self) -> "webview.Window":
         self.window = webview.create_window(
-            "UsageTray",
+            "CodeFuel",
             url=_html_path(),
             js_api=self.api,
             width=WINDOW_W,

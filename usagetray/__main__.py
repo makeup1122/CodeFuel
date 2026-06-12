@@ -42,6 +42,9 @@ def run_cli() -> int:
             print("  (无数据)")
             continue
         for m in snap.metrics:
+            if m.kind == "amount":
+                print(f"  {m.label:<14} {m.text or ''}")
+                continue
             bar_len = 20
             filled = int(round(m.used_percent / 100 * bar_len))
             bar = "#" * filled + "-" * (bar_len - filled)

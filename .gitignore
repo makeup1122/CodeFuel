@@ -7,3 +7,6 @@ dist/
 *.spec.bak
 .venv/
 venv/
+
+# internal design/plan notes — not part of the public repo
+docs/superpowers/

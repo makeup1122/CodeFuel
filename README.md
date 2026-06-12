@@ -1,34 +1,50 @@
-# UsageTray
+# CodeFuel
 
-A Windows system-tray widget that shows your remaining **Claude Code** and
-**OpenAI Codex** usage at a glance — 5-hour session limits and weekly limits —
-so you don't get cut off mid-task.
+A lightweight Windows system-tray widget that keeps your AI coding "fuel gauge"
+in view — the remaining **Claude Code** and **OpenAI Codex** usage limits plus
+your **DeepSeek** account balance — so you don't run dry mid-task.
 
-It reuses the login credentials your Claude Code / Codex CLIs already store on
-disk. No API keys to enter, zero configuration.
+For Claude and Codex it reuses the login credentials their CLIs already store on
+disk: no API keys to enter. DeepSeek uses a balance API key you supply.
+
+> The interface is in Chinese (简体中文).
 
 ## What it shows
 
-- A tray icon with two horizontal bars: top = Claude (orange), bottom = Codex
-  (grey). Each bar tracks the provider's most-used limit; it turns red above 90%
-  and dims with a hatch pattern when that provider errors.
-- Hover over the icon for a dark popup panel: a card per provider with a
-  progress bar, percentage, and reset countdown for each limit window. It
-  hides by itself once the cursor leaves the icon and the panel (left-click
-  also shows it, as a fallback).
-- Right-click menu: **Refresh now**, **Start at login** (off by default),
-  **Quit**.
+- **Tray icon** — two stacked bars: top = Claude (orange), bottom = Codex
+  (grey). Each bar tracks that provider's most-used limit, turns red above 90%,
+  and dims with a hatch pattern when the provider errors.
+- **Hover panel** — a dark popup with one card per provider:
+  - Claude / Codex: a progress bar, percentage, and reset countdown for each
+    limit window (5-hour session, weekly, etc.).
+  - DeepSeek: account balance as plain text — total, topped-up, and granted —
+    per currency. No progress bar (a balance has no natural ceiling) and no tray
+    glyph.
+
+  The panel appears on hover and hides itself once the cursor leaves both the
+  icon and the panel. Left-click also opens it as a fallback.
+- **Right-click menu** — Refresh now · Start at login (off by default) · Quit.
+
+Data is fetched on demand only — at startup, when you open the panel (throttled),
+and on manual refresh — so it never hammers the rate-limited usage endpoints.
 
 ## Requirements
 
 - Windows 10/11 (64-bit) with the **WebView2 runtime** (preinstalled on current
-  Windows 11; otherwise install from Microsoft's Evergreen WebView2 page).
-- Logged-in Claude Code (`~/.claude/.credentials.json`) and/or Codex
-  (`~/.codex/auth.json`). If a credential is missing or expired, that card shows
-  a fix hint; the other provider keeps working.
-- Python 3.11+ (only to run from source / build).
+  Windows 11; otherwise install Microsoft's Evergreen WebView2 runtime).
+- For the Claude / Codex cards: a logged-in Claude Code
+  (`~/.claude/.credentials.json`) and/or Codex (`~/.codex/auth.json`). If a
+  credential is missing or expired, that card shows a fix hint; the others keep
+  working.
+- For the DeepSeek card: a DeepSeek API key (see [Configuration](#configuration)).
+- Python 3.11+ — only needed to run from source or build the EXE.
 
-## Run from source
+## Install
+
+Grab `CodeFuel.exe` from the [Releases](../../releases) page and run it — it's a
+single self-contained executable, no installer.
+
+Or run from source:
 
 ```powershell
 python -m pip install -r requirements.txt
@@ -40,36 +56,9 @@ python -m usagetray --cli
 python -m usagetray
 ```
 
-## How it works
-
-```
-providers/ --fetch()--> poller (daemon thread) --writes--> state (locked cache)
-  claude.py                                          |
-  codex.py                              tray (pystray)   panel (pywebview)
-```
-
-- **providers/** read local credentials and call each tool's private usage
-  endpoint. `fetch()` never raises — on failure it returns a snapshot whose
-  `error` carries a human-readable fix hint.
-  - Claude: `GET https://api.anthropic.com/api/oauth/usage`
-    (`anthropic-beta: oauth-2025-04-20`). On a 401 it attempts one standard
-    OAuth refresh using the local `refreshToken`; the refreshed token is kept in
-    memory only and **never written back** to your credentials file.
-  - Codex: `GET https://chatgpt.com/backend-api/wham/usage`
-    (`Authorization: Bearer`, `ChatGPT-Account-Id`).
-  - DeepSeek: `GET https://api.deepseek.com/user/balance`
-    (`Authorization: Bearer`). Key comes from config.json `deepseek_api_key`,
-    falling back to the `DEEPSEEK_API_KEY` env var. Shows account balance
-    (total / topped-up / granted) as text, not a progress bar; no tray glyph.
-- **poller** fetches on demand only (no periodic polling): once at startup,
-  when the panel is shown (throttled to one fetch per provider per
-  `min_fetch_gap_seconds`), and on manual refresh (bypasses the throttle).
-  One provider failing never blocks the other.
-- **state** is a thread-safe snapshot cache; the UI only reads from it.
-
 ## Configuration
 
-`%APPDATA%\UsageTray\config.json` (created on first run):
+A config file is created on first run at `%APPDATA%\UsageTray\config.json`:
 
 ```json
 {
@@ -79,22 +68,53 @@ providers/ --fetch()--> poller (daemon thread) --writes--> state (locked cache)
 }
 ```
 
-`deepseek_api_key` 留空时回退到环境变量 `DEEPSEEK_API_KEY`。
+- `min_fetch_gap_seconds` — when you open the panel, a provider is re-fetched at
+  most once per this many seconds (manual refresh bypasses it).
+- `providers` — toggle individual cards on/off.
+- `deepseek_api_key` — your DeepSeek balance key. Leave empty to fall back to the
+  `DEEPSEEK_API_KEY` environment variable. With no key, the DeepSeek card shows a
+  hint and the other providers are unaffected.
 
-Logs: `%APPDATA%\UsageTray\usagetray.log` (rotating, 1 MB × 3). Tokens are never
-logged. A named mutex prevents a second instance from launching.
+Logs live next to the config at `%APPDATA%\UsageTray\usagetray.log` (rotating,
+1 MB × 3). Credentials and tokens are never logged. A named mutex prevents a
+second instance from launching.
+
+## How it works
+
+```
+providers/ --fetch()--> poller (daemon thread) --writes--> state (locked cache)
+  claude.py                                          |
+  codex.py                              tray (pystray)   panel (pywebview)
+  deepseek.py
+```
+
+- **providers/** read local credentials (or an API key) and call each tool's
+  usage endpoint. `fetch()` never raises — on failure it returns a snapshot
+  whose `error` carries a human-readable fix hint.
+  - **Claude** — `GET https://api.anthropic.com/api/oauth/usage`
+    (`anthropic-beta: oauth-2025-04-20`). On a 401 it attempts one standard
+    OAuth refresh using the local `refreshToken`; the refreshed token is kept in
+    memory only and **never written back** to your credentials file.
+  - **Codex** — `GET https://chatgpt.com/backend-api/wham/usage`
+    (`Authorization: Bearer`, `ChatGPT-Account-Id`).
+  - **DeepSeek** — `GET https://api.deepseek.com/user/balance`
+    (`Authorization: Bearer`).
+- **poller** fetches on demand only (no periodic polling): once at startup, when
+  the panel is shown (throttled per `min_fetch_gap_seconds`), and on manual
+  refresh. One provider failing never blocks the others.
+- **state** is a thread-safe snapshot cache; the UI only reads from it.
 
 ## Build a single EXE
 
 ```powershell
 python -m pip install pyinstaller
-python -m PyInstaller --noconfirm UsageTray.spec
-# -> dist\UsageTray.exe
+python -m PyInstaller --noconfirm CodeFuel.spec
+# -> dist\CodeFuel.exe
 ```
 
-The `.spec` bundles `panel.html` as data and builds a windowed (no console)
-single-file executable. The autostart registry entry points at the EXE when
-frozen, or at `pythonw -m usagetray` when run from source.
+The `.spec` bundles `panel.html` as data and produces a windowed (no console)
+single-file executable. The "Start at login" entry points at the EXE when frozen,
+or at `pythonw -m usagetray` when run from source.
 
 ## Tests
 
@@ -103,5 +123,10 @@ python -m pytest -q
 ```
 
 Covers each provider (real-response parsing via captured fixtures, missing
-credentials, 401 + refresh, timeouts, field changes), the poller (failure
-isolation, backoff, manual-refresh wake), and config loading.
+credentials, 401 + refresh, rate limits, timeouts, field changes), the data
+model, the poller (on-demand fetch, throttling, failure isolation), and config
+loading.
+
+## License
+
+[MIT](LICENSE) © 2026 libing

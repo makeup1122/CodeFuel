@@ -1,5 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""PyInstaller spec for UsageTray (single-file, windowed)."""
+"""PyInstaller spec for CodeFuel (single-file, windowed)."""
 
 block_cipher = None
 
@@ -34,7 +34,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name="UsageTray",
+    name="CodeFuel",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
