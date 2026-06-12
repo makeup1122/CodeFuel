@@ -18,7 +18,17 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=[
+        # Heavy libs pulled in transitively (e.g. via Pillow/pywebview hooks)
+        # that CodeFuel never uses — excluding them shrinks the EXE a lot.
+        "numpy", "scipy", "pandas", "matplotlib",
+        "torch", "torchvision", "torchgen", "cv2", "transformers",
+        "sympy", "networkx", "lxml", "accelerate", "huggingface_hub",
+        "docling", "docling_parse", "rapidocr", "faker", "tokenizers",
+        # Unused pywebview GUI backends — we only use edgechromium (WebView2).
+        "tkinter", "_tkinter", "PyQt5", "PyQt6", "PySide2", "PySide6",
+        "IPython", "notebook",
+    ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,
