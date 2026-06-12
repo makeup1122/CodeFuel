@@ -72,7 +72,7 @@ class Api:
     def get_snapshots(self) -> list[dict]:
         snaps = self._state.get_all()
         # stable order: claude then codex then others
-        order = {"claude": 0, "codex": 1}
+        order = {"claude": 0, "codex": 1, "deepseek": 2}
         items = sorted(snaps.values(), key=lambda s: order.get(s.provider_id, 99))
         return [s.to_dict() for s in items]
 
@@ -331,7 +331,7 @@ class Panel:
     def push_update(self, snapshots: dict[str, UsageSnapshot]) -> None:
         if not self.window:
             return
-        order = {"claude": 0, "codex": 1}
+        order = {"claude": 0, "codex": 1, "deepseek": 2}
         items = sorted(snapshots.values(), key=lambda s: order.get(s.provider_id, 99))
         payload = json.dumps([s.to_dict() for s in items], ensure_ascii=False)
         try:
