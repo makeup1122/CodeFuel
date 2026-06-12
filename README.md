@@ -1,5 +1,7 @@
 # CodeFuel
 
+**English** | [简体中文](README.zh-CN.md)
+
 A lightweight Windows system-tray widget that keeps your AI coding "fuel gauge"
 in view — the remaining **Claude Code** and **OpenAI Codex** usage limits plus
 your **DeepSeek** account balance — so you don't run dry mid-task.
@@ -129,4 +131,4 @@ loading.
 
 ## License
 
-[MIT](LICENSE) © 2026 libing
+[MIT](LICENSE) © 2026 makeup1122
