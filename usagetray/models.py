@@ -54,10 +54,15 @@ class UsageSnapshot:
 
     @property
     def worst_metric(self) -> Metric | None:
-        """The metric with the highest utilization (most urgent limit)."""
-        if not self.metrics:
+        """The percent metric with the highest utilization (most urgent limit).
+
+        Amount metrics (balances) have no utilization and are excluded so they
+        never drive the tray red-threshold logic.
+        """
+        percent_metrics = [m for m in self.metrics if m.kind == "percent"]
+        if not percent_metrics:
             return None
-        return max(self.metrics, key=lambda m: m.used_percent)
+        return max(percent_metrics, key=lambda m: m.used_percent)
 
     def to_dict(self) -> dict:
         return {
