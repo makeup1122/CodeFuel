@@ -57,6 +57,10 @@ providers/ --fetch()--> poller (daemon thread) --writes--> state (locked cache)
     memory only and **never written back** to your credentials file.
   - Codex: `GET https://chatgpt.com/backend-api/wham/usage`
     (`Authorization: Bearer`, `ChatGPT-Account-Id`).
+  - DeepSeek: `GET https://api.deepseek.com/user/balance`
+    (`Authorization: Bearer`). Key comes from config.json `deepseek_api_key`,
+    falling back to the `DEEPSEEK_API_KEY` env var. Shows account balance
+    (total / topped-up / granted) as text, not a progress bar; no tray glyph.
 - **poller** fetches on demand only (no periodic polling): once at startup,
   when the panel is shown (throttled to one fetch per provider per
   `min_fetch_gap_seconds`), and on manual refresh (bypasses the throttle).
@@ -70,9 +74,12 @@ providers/ --fetch()--> poller (daemon thread) --writes--> state (locked cache)
 ```json
 {
   "min_fetch_gap_seconds": 60,
-  "providers": { "claude": true, "codex": true }
+  "providers": { "claude": true, "codex": true, "deepseek": true },
+  "deepseek_api_key": ""
 }
 ```
+
+`deepseek_api_key` 留空时回退到环境变量 `DEEPSEEK_API_KEY`。
 
 Logs: `%APPDATA%\UsageTray\usagetray.log` (rotating, 1 MB × 3). Tokens are never
 logged. A named mutex prevents a second instance from launching.
