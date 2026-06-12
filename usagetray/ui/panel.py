@@ -106,6 +106,7 @@ class Panel:
         self.api._panel = self
         self.window: "webview.Window | None" = None
         self._visible = False
+        self._showing = False  # reentry guard for show() (see show() docstring)
         self.mouse_inside = False
         self._styles_applied = False
 
@@ -260,9 +261,26 @@ class Panel:
             logger.warning("SetWindowPos failed (err=%s)", ctypes.GetLastError())
 
     def show(self) -> None:
+        """Show and size the panel above the tray clock.
+
+        Reentrancy: ``evaluate_js`` below pumps the Win32 message loop, so the
+        tray's WM_MOUSEMOVE stream re-enters ``show()`` (via the hover callback)
+        before ``_visible`` flips at the end. Without the ``_showing`` guard each
+        re-entry re-measures and resizes the already-visible window, producing a
+        burst of resizes that looks like jitter as the panel pops up.
+        """
         if not self.window:
             logger.warning("show() called before window creation")
             return
+        if self._showing:
+            return
+        self._showing = True
+        try:
+            self._show_inner()
+        finally:
+            self._showing = False
+
+    def _show_inner(self) -> None:
         if self._on_shown:
             try:
                 # kick off an async (throttled) fetch; fresh data lands via

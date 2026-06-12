@@ -29,7 +29,20 @@ def _fmt_reset(dt: datetime | None) -> str:
 
 
 def run_cli() -> int:
-    providers = build_providers()
+    # Console may be a legacy codepage (e.g. GBK) that can't encode ¥ etc.;
+    # force UTF-8 output so amount rows don't crash with UnicodeEncodeError.
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
+    from .config import load_config
+
+    config = load_config()
+    providers = build_providers(
+        config.get("providers"),
+        config.get("deepseek_api_key", ""),
+    )
     exit_code = 0
     for provider in providers:
         snap = provider.fetch()
