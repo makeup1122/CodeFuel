@@ -45,6 +45,7 @@ exe = EXE(
     a.datas,
     [],
     name="CodeFuel",
+    icon="assets/icon.ico",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

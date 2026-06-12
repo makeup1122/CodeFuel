@@ -1,5 +1,7 @@
 # CodeFuel
 
+<p align="center"><img src="assets/icon.png" width="112" alt="CodeFuel icon"></p>
+
 [English](README.md) | **简体中文**
 
 一个轻量的 Windows 系统托盘挂件，把你的 AI 编程"油表"常驻在眼前 —— 包括

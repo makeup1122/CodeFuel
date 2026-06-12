@@ -1,5 +1,7 @@
 # CodeFuel
 
+<p align="center"><img src="assets/icon.png" width="112" alt="CodeFuel icon"></p>
+
 **English** | [简体中文](README.zh-CN.md)
 
 A lightweight Windows system-tray widget that keeps your AI coding "fuel gauge"
