@@ -13,6 +13,7 @@
     --track: #3a3a42;
     --claude: #d97757;
     --codex: #c8c8d0;
+    --deepseek: #4d6bfe;
     --red: #e04a4a;
     --border: #34343c;
   }
@@ -51,11 +52,13 @@
   .card-head .name { font-weight: 600; }
   .card-head .name.claude::before { content: "●"; color: var(--claude); margin-right: 6px; }
   .card-head .name.codex::before { content: "●"; color: var(--codex); margin-right: 6px; }
+  .card-head .name.deepseek::before { content: "●"; color: var(--deepseek); margin-right: 6px; }
   .card-head .updated { color: var(--muted); font-size: 11px; }
   .metric { margin: 7px 0; }
   .metric-top { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 3px; }
   .metric-top .label { color: var(--text); }
   .metric-top .pct { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .metric-top .amount { color: var(--text); font-variant-numeric: tabular-nums; font-weight: 600; }
   .bar { height: 7px; background: var(--track); border-radius: 4px; overflow: hidden; }
   .bar > span { display: block; height: 100%; border-radius: 4px; transition: width .3s ease; }
   .bar.claude > span { background: var(--claude); }
@@ -119,6 +122,12 @@
     return parts.join(' ') + ' 后重置';
   }
   function metricRow(m, pid) {
+    if (m.kind === 'amount') {
+      return `<div class="metric">
+        <div class="metric-top"><span class="label">${esc(m.label)}</span>
+          <span class="amount">${esc(m.text || '')}</span></div>
+      </div>`;
+    }
     const hot = m.used_percent >= 90 ? ' hot' : '';
     const w = Math.max(0, Math.min(100, m.used_percent));
     return `<div class="metric">
