@@ -29,7 +29,7 @@
   }
   body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
   header {
-    padding: 10px 14px 6px;
+    padding: 8px 14px 4px;
     display: flex; align-items: center; justify-content: space-between;
     -webkit-app-region: drag;
   }
@@ -42,19 +42,19 @@
     background: var(--card);
     border: 1px solid var(--border);
     border-radius: 10px;
-    padding: 10px 12px;
-    margin-bottom: 10px;
+    padding: 8px 12px;
+    margin-bottom: 8px;
   }
   .card-head {
     display: flex; align-items: baseline; justify-content: space-between;
-    margin-bottom: 8px;
+    margin-bottom: 6px;
   }
   .card-head .name { font-weight: 600; }
   .card-head .name.claude::before { content: "●"; color: var(--claude); margin-right: 6px; }
   .card-head .name.codex::before { content: "●"; color: var(--codex); margin-right: 6px; }
   .card-head .name.deepseek::before { content: "●"; color: var(--deepseek); margin-right: 6px; }
   .card-head .updated { color: var(--muted); font-size: 11px; }
-  .metric { margin: 7px 0; }
+  .metric { margin: 5px 0; }
   .metric-top { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 3px; }
   .metric-top .label { color: var(--text); }
   .metric-top .pct { color: var(--muted); font-variant-numeric: tabular-nums; }
@@ -72,7 +72,7 @@
   }
   .stale { color: var(--muted); font-size: 11px; margin-top: 6px; }
   footer {
-    display: flex; gap: 8px; padding: 8px 12px 12px; border-top: 1px solid var(--border);
+    display: flex; gap: 8px; padding: 7px 12px 9px; border-top: 1px solid var(--border);
   }
   button {
     flex: 1; background: var(--track); color: var(--text); border: none;
