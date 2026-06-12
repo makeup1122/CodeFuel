@@ -13,6 +13,10 @@ def test_defaults_created_when_missing(tmp_path, monkeypatch):
     assert cfg["providers"]["codex"] is True
     assert cfg["providers"]["deepseek"] is True
     assert cfg["deepseek_api_key"] == ""
+    assert cfg["log_level"] == "INFO"
+    assert cfg["panel_linger_seconds"] == 2.0
+    assert cfg["request_timeout_seconds"] == 10
+    assert cfg["panel_width"] == 400
     # file was created
     assert (tmp_path / "UsageTray" / "config.json").exists()
 

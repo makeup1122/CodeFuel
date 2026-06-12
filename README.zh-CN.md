@@ -62,7 +62,11 @@ python -m usagetray
 {
   "min_fetch_gap_seconds": 60,
   "providers": { "claude": true, "codex": true, "deepseek": true },
-  "deepseek_api_key": ""
+  "deepseek_api_key": "",
+  "log_level": "INFO",
+  "panel_linger_seconds": 2.0,
+  "request_timeout_seconds": 10,
+  "panel_width": 400
 }
 ```
 
@@ -71,6 +75,13 @@ python -m usagetray
 - `providers` —— 单独开关每张卡片。
 - `deepseek_api_key` —— 你的 DeepSeek 余额 key。留空则回退到环境变量
   `DEEPSEEK_API_KEY`。没有 key 时 DeepSeek 卡片显示提示，不影响其他 provider。
+- `log_level` —— `DEBUG` / `INFO` / `WARNING` / `ERROR`。环境变量
+  `USAGETRAY_DEBUG` 仍会无视此值强制 `DEBUG`。
+- `panel_linger_seconds` —— 鼠标离开图标和面板后，面板再停留多少秒才隐藏。
+- `request_timeout_seconds` —— 各 provider 调用接口的 HTTP 超时秒数。
+- `panel_width` —— 面板窗口宽度（CSS 像素，高度按内容自适应）。
+
+改动在下次启动时生效（配置在启动时读取一次）。
 
 日志与配置同目录：`%APPDATA%\UsageTray\usagetray.log`（滚动，1 MB × 3）。凭证
 和 token 从不写入日志。命名互斥量防止启动第二个实例。

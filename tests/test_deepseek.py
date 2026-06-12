@@ -153,3 +153,25 @@ def test_no_balance_infos(monkeypatch):
     snap = provider.fetch()
     assert not snap.ok
     assert "解析" in snap.error
+
+
+def test_configured_timeout_is_used(monkeypatch, deepseek_balance):
+    captured = {}
+
+    def fake_get(url, headers=None, timeout=None):
+        captured["timeout"] = timeout
+        return FakeResponse(200, deepseek_balance)
+
+    monkeypatch.setattr(ds_mod.requests, "get", fake_get)
+    provider = DeepSeekProvider(api_key="sk-test", timeout=3)
+    provider.fetch()
+    assert captured["timeout"] == 3
+
+
+def test_build_providers_passes_timeout():
+    from usagetray.providers import build_providers
+
+    providers = {p.id: p for p in build_providers(request_timeout=7)}
+    assert providers["claude"]._timeout == 7
+    assert providers["codex"]._timeout == 7
+    assert providers["deepseek"]._timeout == 7

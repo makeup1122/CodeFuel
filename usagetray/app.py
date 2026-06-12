@@ -13,7 +13,7 @@ import threading
 import webview
 
 from .config import load_config
-from .log import setup_logging
+from .log import resolve_level, setup_logging
 from .poller import Poller
 from .providers import build_providers
 from .single_instance import SingleInstance
@@ -26,12 +26,13 @@ logger = logging.getLogger("usagetray.app")
 
 
 class UsageTrayApp:
-    def __init__(self) -> None:
-        self.config = load_config()
+    def __init__(self, config: dict | None = None) -> None:
+        self.config = config if config is not None else load_config()
         self.state = AppState()
         providers = build_providers(
             self.config.get("providers"),
             self.config.get("deepseek_api_key", ""),
+            int(self.config.get("request_timeout_seconds", 10)),
         )
         self.poller = Poller(providers, self.state, self.config.get("min_fetch_gap_seconds", 60))
         self.panel = Panel(
@@ -39,8 +40,13 @@ class UsageTrayApp:
             on_refresh=self._on_refresh,
             on_quit=self._on_quit,
             on_shown=self._on_panel_shown,
+            width=int(self.config.get("panel_width", 400)),
         )
-        self.hover = HoverController(self.panel, inside_check=self._hover_inside_check)
+        self.hover = HoverController(
+            self.panel,
+            inside_check=self._hover_inside_check,
+            linger=float(self.config.get("panel_linger_seconds", 2.0)),
+        )
         self.tray = TrayIcon(
             on_show_panel=self.panel.show,
             on_refresh=self._on_refresh,
@@ -110,17 +116,19 @@ class UsageTrayApp:
 
 
 def main() -> int:
-    setup_logging()
+    config = load_config()
+    setup_logging(resolve_level(config.get("log_level")))
     logger.info(
-        "starting (debug=%s)", logging.getLogger("usagetray").level == logging.DEBUG
+        "starting (level=%s)",
+        logging.getLevelName(logging.getLogger("usagetray").level),
     )
     instance = SingleInstance()
     if instance.already_running():
         logger.info("another instance is running; exiting")
-        print("UsageTray is already running.")
+        print("CodeFuel is already running.")
         return 0
     try:
-        return UsageTrayApp().run()
+        return UsageTrayApp(config).run()
     except Exception:
         logger.exception("fatal error")
         return 1

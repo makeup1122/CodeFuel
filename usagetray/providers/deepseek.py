@@ -39,8 +39,9 @@ class DeepSeekProvider:
     id = "deepseek"
     display_name = "DeepSeek"
 
-    def __init__(self, api_key: str | None = None) -> None:
+    def __init__(self, api_key: str | None = None, timeout: int = TIMEOUT) -> None:
         self._api_key = api_key
+        self._timeout = timeout
 
     # ---- credential handling -------------------------------------------------
 
@@ -66,7 +67,7 @@ class DeepSeekProvider:
             "Authorization": f"Bearer {key}",
             "Accept": "application/json",
         }
-        return requests.get(BALANCE_URL, headers=headers, timeout=TIMEOUT)
+        return requests.get(BALANCE_URL, headers=headers, timeout=self._timeout)
 
     # ---- parsing -------------------------------------------------------------
 
@@ -114,7 +115,7 @@ class DeepSeekProvider:
         try:
             resp = self._request_balance(key)
         except requests.Timeout:
-            return self._err("请求超时（10s），稍后重试。")
+            return self._err(f"请求超时（{self._timeout}s），稍后重试。")
         except requests.ConnectionError:
             return self._err("网络连接失败，稍后重试。")
         except requests.RequestException as exc:

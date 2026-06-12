@@ -65,8 +65,9 @@ class CodexProvider:
     id = "codex"
     display_name = "OpenAI Codex"
 
-    def __init__(self, auth_path: Path | None = None) -> None:
+    def __init__(self, auth_path: Path | None = None, timeout: int = TIMEOUT) -> None:
         self._auth_path = auth_path or _auth_path()
+        self._timeout = timeout
 
     def _read_auth(self) -> dict | None:
         if not self._auth_path.exists():
@@ -129,9 +130,9 @@ class CodexProvider:
             headers["ChatGPT-Account-Id"] = account_id
 
         try:
-            resp = requests.get(USAGE_URL, headers=headers, timeout=TIMEOUT)
+            resp = requests.get(USAGE_URL, headers=headers, timeout=self._timeout)
         except requests.Timeout:
-            return self._err("请求超时（10s），稍后重试。")
+            return self._err(f"请求超时（{self._timeout}s），稍后重试。")
         except requests.ConnectionError:
             return self._err("网络连接失败，稍后重试。")
         except requests.RequestException as exc:

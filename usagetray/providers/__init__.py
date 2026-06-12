@@ -25,12 +25,14 @@ class Provider(Protocol):
 def build_providers(
     enabled: dict[str, bool] | None = None,
     deepseek_api_key: str = "",
+    request_timeout: int = 10,
 ) -> list[Provider]:
     """Instantiate the registered providers.
 
     ``enabled`` maps provider id -> bool; missing ids default to enabled.
     ``deepseek_api_key`` is injected into DeepSeekProvider (empty -> provider
-    falls back to the DEEPSEEK_API_KEY env var).
+    falls back to the DEEPSEEK_API_KEY env var). ``request_timeout`` is the HTTP
+    timeout (seconds) applied to every provider's usage call.
     """
     from .claude import ClaudeProvider
     from .codex import CodexProvider
@@ -38,8 +40,8 @@ def build_providers(
 
     enabled = enabled or {}
     registry: list[Provider] = [
-        ClaudeProvider(),
-        CodexProvider(),
-        DeepSeekProvider(api_key=deepseek_api_key or None),
+        ClaudeProvider(timeout=request_timeout),
+        CodexProvider(timeout=request_timeout),
+        DeepSeekProvider(api_key=deepseek_api_key or None, timeout=request_timeout),
     ]
     return [p for p in registry if enabled.get(p.id, True)]

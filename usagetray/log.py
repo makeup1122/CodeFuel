@@ -12,6 +12,26 @@ from .config import config_dir
 
 _configured = False
 
+_LEVELS = {
+    "DEBUG": logging.DEBUG,
+    "INFO": logging.INFO,
+    "WARNING": logging.WARNING,
+    "ERROR": logging.ERROR,
+}
+
+
+def resolve_level(name: str | int | None) -> int:
+    """Map a config log-level name to a logging constant.
+
+    Accepts a level name (case-insensitive), an int level, or None. Unknown
+    values fall back to INFO.
+    """
+    if isinstance(name, int):
+        return name
+    if isinstance(name, str):
+        return _LEVELS.get(name.strip().upper(), logging.INFO)
+    return logging.INFO
+
 
 def setup_logging(level: int = logging.INFO) -> None:
     global _configured

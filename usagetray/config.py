@@ -17,6 +17,10 @@ DEFAULTS = {
     "min_fetch_gap_seconds": 60,
     "providers": {"claude": True, "codex": True, "deepseek": True},
     "deepseek_api_key": "",
+    "log_level": "INFO",            # DEBUG | INFO | WARNING | ERROR (env USAGETRAY_DEBUG forces DEBUG)
+    "panel_linger_seconds": 2.0,    # how long the panel lingers after the cursor leaves
+    "request_timeout_seconds": 10,  # HTTP timeout for each provider's usage call
+    "panel_width": 400,             # panel window width in CSS px (height auto-fits)
 }
 
 

@@ -124,9 +124,9 @@ class TrayIcon:
         self._claude: UsageSnapshot | None = None
         self._codex: UsageSnapshot | None = None
         self.icon = _HoverableIcon(
-            "UsageTray",
+            "CodeFuel",
             icon=render_icon(None, None),
-            title="UsageTray",
+            title="CodeFuel",
             menu=self._build_menu(),
             on_hover=on_hover,
         )

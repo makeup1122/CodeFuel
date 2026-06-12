@@ -99,9 +99,11 @@ class Panel:
         on_refresh: Callable[[], None],
         on_quit: Callable[[], None],
         on_shown: Callable[[], None] | None = None,
+        width: int = WINDOW_W,
     ):
         self._state = state
         self._on_shown = on_shown
+        self._width = int(width)
         self.api = Api(state, on_refresh, on_quit)
         self.api._panel = self
         self.window: "webview.Window | None" = None
@@ -115,7 +117,7 @@ class Panel:
             "CodeFuel",
             url=_html_path(),
             js_api=self.api,
-            width=WINDOW_W,
+            width=self._width,
             height=WINDOW_H,
             frameless=True,
             easy_drag=False,
@@ -248,7 +250,7 @@ class Panel:
                 # viewport is constant, so adjust relative to current size
                 target = min(content, MAX_CSS_HEIGHT)
                 h = int(round(cur_h + (target - vh) * ratio))
-                w = int(round(cur_w + (WINDOW_W - vw) * ratio))
+                w = int(round(cur_w + (self._width - vw) * ratio))
                 h = min(h, wa.bottom - wa.top - 24)  # never taller than workarea
             else:
                 flags |= SWP_NOSIZE

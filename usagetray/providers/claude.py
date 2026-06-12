@@ -63,8 +63,9 @@ class ClaudeProvider:
     id = "claude"
     display_name = "Claude Code"
 
-    def __init__(self, creds_path: Path | None = None) -> None:
+    def __init__(self, creds_path: Path | None = None, timeout: int = TIMEOUT) -> None:
         self._creds_path = creds_path or _creds_path()
+        self._timeout = timeout
         # In-memory token override after a successful refresh (never persisted).
         self._access_override: str | None = None
         self._refresh_override: str | None = None
@@ -100,7 +101,7 @@ class ClaudeProvider:
             "anthropic-beta": BETA_HEADER,
             "Accept": "application/json",
         }
-        return requests.get(USAGE_URL, headers=headers, timeout=TIMEOUT)
+        return requests.get(USAGE_URL, headers=headers, timeout=self._timeout)
 
     def _try_refresh(self, refresh_token: str) -> str | None:
         """Attempt a standard OAuth refresh. Returns new access token or None.
@@ -117,7 +118,7 @@ class ClaudeProvider:
                     "client_id": OAUTH_CLIENT_ID,
                 },
                 headers={"Content-Type": "application/json", "Accept": "application/json"},
-                timeout=TIMEOUT,
+                timeout=self._timeout,
             )
         except requests.RequestException:
             return None
@@ -182,7 +183,7 @@ class ClaudeProvider:
         try:
             resp = self._request_usage(token)
         except requests.Timeout:
-            return self._err("请求超时（10s），稍后重试。")
+            return self._err(f"请求超时（{self._timeout}s），稍后重试。")
         except requests.ConnectionError:
             return self._err("网络连接失败，稍后重试。")
         except requests.RequestException as exc:

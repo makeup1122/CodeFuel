@@ -66,7 +66,11 @@ A config file is created on first run at `%APPDATA%\UsageTray\config.json`:
 {
   "min_fetch_gap_seconds": 60,
   "providers": { "claude": true, "codex": true, "deepseek": true },
-  "deepseek_api_key": ""
+  "deepseek_api_key": "",
+  "log_level": "INFO",
+  "panel_linger_seconds": 2.0,
+  "request_timeout_seconds": 10,
+  "panel_width": 400
 }
 ```
 
@@ -76,6 +80,14 @@ A config file is created on first run at `%APPDATA%\UsageTray\config.json`:
 - `deepseek_api_key` — your DeepSeek balance key. Leave empty to fall back to the
   `DEEPSEEK_API_KEY` environment variable. With no key, the DeepSeek card shows a
   hint and the other providers are unaffected.
+- `log_level` — `DEBUG` / `INFO` / `WARNING` / `ERROR`. The `USAGETRAY_DEBUG`
+  environment variable still forces `DEBUG` regardless of this value.
+- `panel_linger_seconds` — how long the panel stays up after the cursor leaves
+  both the icon and the panel.
+- `request_timeout_seconds` — HTTP timeout for each provider's usage call.
+- `panel_width` — panel window width in CSS px (height auto-fits to content).
+
+Changes take effect on the next launch (config is read once at startup).
 
 Logs live next to the config at `%APPDATA%\UsageTray\usagetray.log` (rotating,
 1 MB × 3). Credentials and tokens are never logged. A named mutex prevents a
