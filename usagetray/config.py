@@ -15,7 +15,8 @@ RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 
 DEFAULTS = {
     "min_fetch_gap_seconds": 60,
-    "providers": {"claude": True, "codex": True},
+    "providers": {"claude": True, "codex": True, "deepseek": True},
+    "deepseek_api_key": "",
 }
 
 

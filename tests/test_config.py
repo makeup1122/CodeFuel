@@ -11,6 +11,8 @@ def test_defaults_created_when_missing(tmp_path, monkeypatch):
     assert cfg["min_fetch_gap_seconds"] == 60
     assert cfg["providers"]["claude"] is True
     assert cfg["providers"]["codex"] is True
+    assert cfg["providers"]["deepseek"] is True
+    assert cfg["deepseek_api_key"] == ""
     # file was created
     assert (tmp_path / "UsageTray" / "config.json").exists()
 
