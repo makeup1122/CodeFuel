@@ -16,7 +16,7 @@ from PIL import Image, ImageDraw
 from ..config import is_autostart_enabled, set_autostart
 from ..models import UsageSnapshot
 
-logger = logging.getLogger("usagetray.tray")
+logger = logging.getLogger("codefuel.tray")
 
 WM_MOUSEMOVE = 0x0200
 

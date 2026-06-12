@@ -52,15 +52,15 @@ Or run from source:
 python -m pip install -r requirements.txt
 
 # Print current usage to the terminal (data-layer smoke test):
-python -m usagetray --cli
+python -m codefuel --cli
 
 # Launch the tray app:
-python -m usagetray
+python -m codefuel
 ```
 
 ## Configuration
 
-A config file is created on first run at `%APPDATA%\UsageTray\config.json`:
+A config file is created on first run at `%APPDATA%\CodeFuel\config.json`:
 
 ```json
 {
@@ -80,7 +80,7 @@ A config file is created on first run at `%APPDATA%\UsageTray\config.json`:
 - `deepseek_api_key` — your DeepSeek balance key. Leave empty to fall back to the
   `DEEPSEEK_API_KEY` environment variable. With no key, the DeepSeek card shows a
   hint and the other providers are unaffected.
-- `log_level` — `DEBUG` / `INFO` / `WARNING` / `ERROR`. The `USAGETRAY_DEBUG`
+- `log_level` — `DEBUG` / `INFO` / `WARNING` / `ERROR`. The `CODEFUEL_DEBUG`
   environment variable still forces `DEBUG` regardless of this value.
 - `panel_linger_seconds` — how long the panel stays up after the cursor leaves
   both the icon and the panel.
@@ -89,7 +89,7 @@ A config file is created on first run at `%APPDATA%\UsageTray\config.json`:
 
 Changes take effect on the next launch (config is read once at startup).
 
-Logs live next to the config at `%APPDATA%\UsageTray\usagetray.log` (rotating,
+Logs live next to the config at `%APPDATA%\CodeFuel\codefuel.log` (rotating,
 1 MB × 3). Credentials and tokens are never logged. A named mutex prevents a
 second instance from launching.
 
@@ -128,7 +128,7 @@ python -m PyInstaller --noconfirm CodeFuel.spec
 
 The `.spec` bundles `panel.html` as data and produces a windowed (no console)
 single-file executable. The "Start at login" entry points at the EXE when frozen,
-or at `pythonw -m usagetray` when run from source.
+or at `pythonw -m codefuel` when run from source.
 
 ## Tests
 

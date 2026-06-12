@@ -3,8 +3,8 @@ from __future__ import annotations
 import pytest
 import requests
 
-from usagetray.providers import deepseek as ds_mod
-from usagetray.providers.deepseek import DeepSeekProvider
+from codefuel.providers import deepseek as ds_mod
+from codefuel.providers.deepseek import DeepSeekProvider
 
 
 class FakeResponse:
@@ -169,7 +169,7 @@ def test_configured_timeout_is_used(monkeypatch, deepseek_balance):
 
 
 def test_build_providers_passes_timeout():
-    from usagetray.providers import build_providers
+    from codefuel.providers import build_providers
 
     providers = {p.id: p for p in build_providers(request_timeout=7)}
     assert providers["claude"]._timeout == 7

@@ -1,6 +1,6 @@
 """Config read/write + Windows autostart registry toggle.
 
-Config lives at %APPDATA%\\UsageTray\\config.json. Missing file -> defaults are
+Config lives at %APPDATA%\\CodeFuel\\config.json. Missing file -> defaults are
 used and the file is created.
 """
 from __future__ import annotations
@@ -10,14 +10,14 @@ import os
 import sys
 from pathlib import Path
 
-APP_NAME = "UsageTray"
+APP_NAME = "CodeFuel"
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 
 DEFAULTS = {
     "min_fetch_gap_seconds": 60,
     "providers": {"claude": True, "codex": True, "deepseek": True},
     "deepseek_api_key": "",
-    "log_level": "INFO",            # DEBUG | INFO | WARNING | ERROR (env USAGETRAY_DEBUG forces DEBUG)
+    "log_level": "INFO",            # DEBUG | INFO | WARNING | ERROR (env CODEFUEL_DEBUG forces DEBUG)
     "panel_linger_seconds": 2.0,    # how long the panel lingers after the cursor leaves
     "request_timeout_seconds": 10,  # HTTP timeout for each provider's usage call
     "panel_width": 400,             # panel window width in CSS px (height auto-fits)
@@ -64,13 +64,13 @@ def save_config(cfg: dict) -> None:
 def _exe_command() -> str:
     """Command to register for autostart.
 
-    Frozen (PyInstaller) -> the exe path. Source -> pythonw -m usagetray.
+    Frozen (PyInstaller) -> the exe path. Source -> pythonw -m codefuel.
     """
     if getattr(sys, "frozen", False):
         return f'"{sys.executable}"'
     pyw = Path(sys.executable).with_name("pythonw.exe")
     runner = str(pyw) if pyw.exists() else sys.executable
-    return f'"{runner}" -m usagetray'
+    return f'"{runner}" -m codefuel'
 
 
 def is_autostart_enabled() -> bool:

@@ -6,8 +6,8 @@ from pathlib import Path
 import pytest
 import requests
 
-from usagetray.providers import claude as claude_mod
-from usagetray.providers.claude import ClaudeProvider
+from codefuel.providers import claude as claude_mod
+from codefuel.providers.claude import ClaudeProvider
 
 
 class FakeResponse:

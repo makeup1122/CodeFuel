@@ -1,4 +1,4 @@
-"""Logging setup. RotatingFileHandler to %APPDATA%\\UsageTray\\usagetray.log.
+"""Logging setup. RotatingFileHandler to %APPDATA%\\CodeFuel\\codefuel.log.
 
 Never logs tokens (providers don't pass tokens to the logger).
 """
@@ -37,16 +37,16 @@ def setup_logging(level: int = logging.INFO) -> None:
     global _configured
     if _configured:
         return
-    if os.environ.get("USAGETRAY_DEBUG"):
+    if os.environ.get("CODEFUEL_DEBUG"):
         level = logging.DEBUG
-    log_path = config_dir() / "usagetray.log"
+    log_path = config_dir() / "codefuel.log"
     handler = RotatingFileHandler(
         log_path, maxBytes=1_000_000, backupCount=3, encoding="utf-8"
     )
     handler.setFormatter(
         logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
     )
-    root = logging.getLogger("usagetray")
+    root = logging.getLogger("codefuel")
     root.setLevel(level)
     root.addHandler(handler)
     _configured = True

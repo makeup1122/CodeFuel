@@ -3,7 +3,7 @@
 Credential: %USERPROFILE%\\.codex\\auth.json -> tokens.access_token / tokens.account_id
 Endpoint:   GET https://chatgpt.com/backend-api/wham/usage
 Headers:    Authorization: Bearer <token>, ChatGPT-Account-Id: <account_id>,
-            Accept: application/json, User-Agent: UsageTray
+            Accept: application/json, User-Agent: CodeFuel
 
 Response shape (real, captured 2026-06):
     {"plan_type": "prolite",
@@ -124,7 +124,7 @@ class CodexProvider:
         headers = {
             "Authorization": f"Bearer {token}",
             "Accept": "application/json",
-            "User-Agent": "UsageTray",
+            "User-Agent": "CodeFuel",
         }
         if account_id:
             headers["ChatGPT-Account-Id"] = account_id

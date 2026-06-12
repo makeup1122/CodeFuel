@@ -46,7 +46,7 @@ def main() -> int:
     headers = {
         "Authorization": f"Bearer {token}",
         "Accept": "application/json",
-        "User-Agent": "UsageTray",
+        "User-Agent": "CodeFuel",
     }
     if account_id:
         headers["ChatGPT-Account-Id"] = account_id

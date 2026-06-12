@@ -22,10 +22,10 @@ from .ui.hover import HoverController, cursor_in_tray_or_panel
 from .ui.panel import Panel
 from .ui.tray import TrayIcon
 
-logger = logging.getLogger("usagetray.app")
+logger = logging.getLogger("codefuel.app")
 
 
-class UsageTrayApp:
+class CodeFuelApp:
     def __init__(self, config: dict | None = None) -> None:
         self.config = config if config is not None else load_config()
         self.state = AppState()
@@ -120,7 +120,7 @@ def main() -> int:
     setup_logging(resolve_level(config.get("log_level")))
     logger.info(
         "starting (level=%s)",
-        logging.getLevelName(logging.getLogger("usagetray").level),
+        logging.getLevelName(logging.getLogger("codefuel").level),
     )
     instance = SingleInstance()
     if instance.already_running():
@@ -128,7 +128,7 @@ def main() -> int:
         print("CodeFuel is already running.")
         return 0
     try:
-        return UsageTrayApp(config).run()
+        return CodeFuelApp(config).run()
     except Exception:
         logger.exception("fatal error")
         return 1

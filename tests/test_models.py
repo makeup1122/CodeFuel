@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from usagetray.models import Metric, UsageSnapshot
+from codefuel.models import Metric, UsageSnapshot
 
 
 def test_worst_metric_ignores_amount_rows():

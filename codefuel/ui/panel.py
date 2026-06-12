@@ -20,7 +20,7 @@ import webview
 from ..models import UsageSnapshot
 from ..state import AppState
 
-logger = logging.getLogger("usagetray.panel")
+logger = logging.getLogger("codefuel.panel")
 
 WINDOW_W = 400          # CSS px; physical size derives from per-window DPI
 WINDOW_H = 320          # initial height only; show() auto-fits to content
@@ -48,7 +48,7 @@ def _html_path() -> str:
     # When frozen by PyInstaller, data files live under sys._MEIPASS.
     base = getattr(sys, "_MEIPASS", None)
     if base:
-        candidate = Path(base) / "usagetray" / "ui" / "panel.html"
+        candidate = Path(base) / "codefuel" / "ui" / "panel.html"
         if candidate.exists():
             return str(candidate)
     return str(Path(__file__).with_name("panel.html"))

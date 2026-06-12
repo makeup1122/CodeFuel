@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 
-from usagetray.log import resolve_level
+from codefuel.log import resolve_level
 
 
 def test_resolve_level_names():

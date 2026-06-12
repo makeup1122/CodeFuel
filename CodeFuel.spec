@@ -4,11 +4,11 @@
 block_cipher = None
 
 a = Analysis(
-    ["run_usagetray.py"],
+    ["run_codefuel.py"],
     pathex=[],
     binaries=[],
     datas=[
-        ("usagetray/ui/panel.html", "usagetray/ui"),
+        ("codefuel/ui/panel.html", "codefuel/ui"),
     ],
     hiddenimports=[
         "pystray._win32",

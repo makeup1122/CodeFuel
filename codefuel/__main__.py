@@ -1,8 +1,8 @@
 """Entry point: assembles modules and handles the thread model.
 
 Modes:
-    python -m usagetray            -> GUI tray app
-    python -m usagetray --cli      -> print both providers' current usage and exit
+    python -m codefuel            -> GUI tray app
+    python -m codefuel --cli      -> print both providers' current usage and exit
 """
 from __future__ import annotations
 
@@ -74,7 +74,7 @@ def run_gui() -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="usagetray", description="AI coding usage tray")
+    parser = argparse.ArgumentParser(prog="codefuel", description="AI coding usage tray")
     parser.add_argument("--cli", action="store_true", help="print current usage and exit")
     args = parser.parse_args(argv)
 

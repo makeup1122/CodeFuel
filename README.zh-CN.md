@@ -48,15 +48,15 @@ key；DeepSeek 则使用你自己提供的余额查询 key。
 python -m pip install -r requirements.txt
 
 # 在终端打印当前用量（数据层冒烟测试）：
-python -m usagetray --cli
+python -m codefuel --cli
 
 # 启动托盘应用：
-python -m usagetray
+python -m codefuel
 ```
 
 ## 配置
 
-首次运行会在 `%APPDATA%\UsageTray\config.json` 生成配置文件：
+首次运行会在 `%APPDATA%\CodeFuel\config.json` 生成配置文件：
 
 ```json
 {
@@ -76,14 +76,14 @@ python -m usagetray
 - `deepseek_api_key` —— 你的 DeepSeek 余额 key。留空则回退到环境变量
   `DEEPSEEK_API_KEY`。没有 key 时 DeepSeek 卡片显示提示，不影响其他 provider。
 - `log_level` —— `DEBUG` / `INFO` / `WARNING` / `ERROR`。环境变量
-  `USAGETRAY_DEBUG` 仍会无视此值强制 `DEBUG`。
+  `CODEFUEL_DEBUG` 仍会无视此值强制 `DEBUG`。
 - `panel_linger_seconds` —— 鼠标离开图标和面板后，面板再停留多少秒才隐藏。
 - `request_timeout_seconds` —— 各 provider 调用接口的 HTTP 超时秒数。
 - `panel_width` —— 面板窗口宽度（CSS 像素，高度按内容自适应）。
 
 改动在下次启动时生效（配置在启动时读取一次）。
 
-日志与配置同目录：`%APPDATA%\UsageTray\usagetray.log`（滚动，1 MB × 3）。凭证
+日志与配置同目录：`%APPDATA%\CodeFuel\codefuel.log`（滚动，1 MB × 3）。凭证
 和 token 从不写入日志。命名互斥量防止启动第二个实例。
 
 ## 工作原理
@@ -118,7 +118,7 @@ python -m PyInstaller --noconfirm CodeFuel.spec
 ```
 
 `.spec` 会把 `panel.html` 作为数据打包，产出一个无控制台窗口的单文件可执行
-程序。"开机自启"在打包后指向该 EXE，从源码运行时则指向 `pythonw -m usagetray`。
+程序。"开机自启"在打包后指向该 EXE，从源码运行时则指向 `pythonw -m codefuel`。
 
 ## 测试
 

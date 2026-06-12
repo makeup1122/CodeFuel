@@ -6,8 +6,8 @@ from pathlib import Path
 
 import requests
 
-from usagetray.providers import codex as codex_mod
-from usagetray.providers.codex import CodexProvider
+from codefuel.providers import codex as codex_mod
+from codefuel.providers.codex import CodexProvider
 
 
 class FakeResponse:

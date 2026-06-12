@@ -6,9 +6,9 @@ from __future__ import annotations
 
 import logging
 
-logger = logging.getLogger("usagetray.single_instance")
+logger = logging.getLogger("codefuel.single_instance")
 
-MUTEX_NAME = "Global\\UsageTray_SingleInstance_Mutex"
+MUTEX_NAME = "Global\\CodeFuel_SingleInstance_Mutex"
 ERROR_ALREADY_EXISTS = 183
 
 

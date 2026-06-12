@@ -1,7 +1,7 @@
 """HoverController: show on heartbeat, stay while cursor inside, linger then hide."""
 import time
 
-from usagetray.ui.hover import HoverController
+from codefuel.ui.hover import HoverController
 
 
 class FakePanel:

@@ -3,9 +3,9 @@ from __future__ import annotations
 import time
 from datetime import datetime, timezone
 
-from usagetray.models import Metric, UsageSnapshot
-from usagetray.poller import Poller
-from usagetray.state import AppState
+from codefuel.models import Metric, UsageSnapshot
+from codefuel.poller import Poller
+from codefuel.state import AppState
 
 
 class FakeProvider:

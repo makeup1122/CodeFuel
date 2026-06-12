@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 from .providers import Provider
 from .state import AppState
 
-logger = logging.getLogger("usagetray.poller")
+logger = logging.getLogger("codefuel.poller")
 
 MIN_GAP_SECONDS = 60
 
@@ -46,7 +46,7 @@ class Poller:
         if self._thread and self._thread.is_alive():
             return
         self._stop.clear()
-        self._thread = threading.Thread(target=self._run, name="usagetray-poller", daemon=True)
+        self._thread = threading.Thread(target=self._run, name="codefuel-poller", daemon=True)
         self._thread.start()
 
     def stop(self) -> None:
