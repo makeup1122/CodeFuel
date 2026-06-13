@@ -11,6 +11,8 @@
 Claude 和 Codex 直接复用它们的 CLI 已经存在本地的登录凭证，无需手动填 API
 key；DeepSeek 则使用你自己提供的余额查询 key。
 
+<p align="center"><img src="assets/screenshot.png" width="320" alt="CodeFuel 悬停面板"></p>
+
 ## 显示什么
 
 - **托盘图标** —— 两条横向条：上 = Claude（橙色），下 = Codex（灰色）。每条

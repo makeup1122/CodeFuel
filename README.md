@@ -13,6 +13,8 @@ disk: no API keys to enter. DeepSeek uses a balance API key you supply.
 
 > The interface is in Chinese (简体中文).
 
+<p align="center"><img src="assets/screenshot.png" width="320" alt="CodeFuel hover panel"></p>
+
 ## What it shows
 
 - **Tray icon** — two stacked bars: top = Claude (orange), bottom = Codex
