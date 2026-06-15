@@ -11,13 +11,18 @@ Response shape (real, captured 2026-03):
 Each window is either null or {"utilization": float 0-100, "resets_at": ISO}.
 
 On 401 with a usable refreshToken we attempt one standard OAuth refresh and
-retry. The refreshed token is kept only in memory; we never write back to the
-user's .credentials.json.
+retry. Anthropic ROTATES refresh tokens: each refresh mints a new
+access/refresh pair and invalidates the previous refresh token. We therefore
+write the rotated pair back to .credentials.json (atomically, preserving every
+other field) so the Claude Code CLI's stored credential stays valid - keeping
+the new token only in memory would leave the on-disk refresh token dead and
+force a CLI re-login on the next use.
 """
 from __future__ import annotations
 
 import json
 import os
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -107,8 +112,9 @@ class ClaudeProvider:
     def _try_refresh(self, refresh_token: str) -> str | None:
         """Attempt a standard OAuth refresh. Returns new access token or None.
 
-        The new tokens are cached in memory only; we do not write to the
-        user's credential file.
+        On success the rotated tokens are cached in memory AND written back to
+        the credential file (see _persist_tokens) so the on-disk copy the CLI
+        relies on does not go stale.
         """
         try:
             resp = requests.post(
@@ -130,12 +136,47 @@ class ClaudeProvider:
         except ValueError:
             return None
         new_access = body.get("access_token")
-        if isinstance(body.get("refresh_token"), str):
-            self._refresh_override = body["refresh_token"]
-        if isinstance(new_access, str) and new_access:
-            self._access_override = new_access
-            return new_access
-        return None
+        if not (isinstance(new_access, str) and new_access):
+            return None
+        self._access_override = new_access
+        new_refresh = body.get("refresh_token")
+        if isinstance(new_refresh, str) and new_refresh:
+            self._refresh_override = new_refresh
+        # Persist the rotated pair so the CLI's stored credential stays alive.
+        self._persist_tokens(new_access, new_refresh, body.get("expires_in"))
+        return new_access
+
+    def _persist_tokens(self, access: str, refresh, expires_in) -> None:
+        """Atomically write refreshed tokens back to .credentials.json.
+
+        Re-reads the current file and patches only the oauth token fields, so
+        every other field (mcpOAuth, scopes, subscriptionType, ...) is kept
+        verbatim. Any failure is swallowed: the in-memory override still lets
+        this run succeed, and we must never corrupt the user's credential file.
+        """
+        try:
+            raw = json.loads(self._creds_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return
+        if not isinstance(raw, dict):
+            return
+        oauth = raw.get("claudeAiOauth")
+        if not isinstance(oauth, dict):
+            return
+        oauth["accessToken"] = access
+        if isinstance(refresh, str) and refresh:
+            oauth["refreshToken"] = refresh
+        if isinstance(expires_in, (int, float)) and expires_in > 0:
+            oauth["expiresAt"] = int(time.time() * 1000 + expires_in * 1000)
+        try:
+            tmp = self._creds_path.parent / (self._creds_path.name + ".tmp")
+            tmp.write_text(
+                json.dumps(raw, ensure_ascii=False, separators=(",", ":")),
+                encoding="utf-8",
+            )
+            os.replace(tmp, self._creds_path)  # atomic on the same volume
+        except OSError:
+            return
 
     # ---- parsing -------------------------------------------------------------
 

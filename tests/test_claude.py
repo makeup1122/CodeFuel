@@ -122,10 +122,82 @@ def test_401_refresh_succeeds(tmp_path, monkeypatch, claude_usage):
     snap = provider.fetch()
     assert snap.ok
     assert calls["get"] == 2
-    # refreshed token cached in memory, not written to file
+    # refreshed token cached in memory AND written back to disk so the CLI's
+    # stored credential stays valid (Anthropic rotates refresh tokens)
     assert provider._access_override == "new-token"
     on_disk = json.loads(creds.read_text(encoding="utf-8"))
-    assert on_disk["claudeAiOauth"]["accessToken"] == "old"
+    assert on_disk["claudeAiOauth"]["accessToken"] == "new-token"
+    assert on_disk["claudeAiOauth"]["refreshToken"] == "new-ref"
+
+
+def test_refresh_writeback_preserves_other_fields(tmp_path, monkeypatch, claude_usage):
+    raw = json.dumps(
+        {
+            "mcpOAuth": {"some": "value"},
+            "claudeAiOauth": {
+                "accessToken": "old",
+                "refreshToken": "ref",
+                "expiresAt": 111,
+                "scopes": ["user:inference"],
+                "subscriptionType": "pro",
+                "rateLimitTier": "default_claude_ai",
+            },
+        }
+    )
+    creds = write_creds(tmp_path, None, raw=raw)
+    provider = ClaudeProvider(creds_path=creds)
+
+    gets = {"n": 0}
+
+    def fake_get(url, headers=None, timeout=None):
+        gets["n"] += 1
+        return FakeResponse(401, {}) if gets["n"] == 1 else FakeResponse(200, claude_usage)
+
+    monkeypatch.setattr(claude_mod.requests, "get", fake_get)
+    monkeypatch.setattr(
+        claude_mod.requests,
+        "post",
+        lambda *a, **k: FakeResponse(
+            200, {"access_token": "new-token", "refresh_token": "new-ref", "expires_in": 3600}
+        ),
+    )
+    monkeypatch.setattr(claude_mod.time, "time", lambda: 1_000_000.0)
+
+    assert provider.fetch().ok
+    on_disk = json.loads(creds.read_text(encoding="utf-8"))
+    oauth = on_disk["claudeAiOauth"]
+    # rotated tokens written
+    assert oauth["accessToken"] == "new-token"
+    assert oauth["refreshToken"] == "new-ref"
+    # expiresAt updated from expires_in (epoch ms)
+    assert oauth["expiresAt"] == int(1_000_000.0 * 1000 + 3600 * 1000)
+    # every other field preserved verbatim
+    assert on_disk["mcpOAuth"] == {"some": "value"}
+    assert oauth["scopes"] == ["user:inference"]
+    assert oauth["subscriptionType"] == "pro"
+    assert oauth["rateLimitTier"] == "default_claude_ai"
+    # no leftover temp file
+    assert not (tmp_path / ".credentials.json.tmp").exists()
+
+
+def test_refresh_without_rotation_keeps_refresh_token(tmp_path, monkeypatch, claude_usage):
+    creds = write_creds(tmp_path, {"accessToken": "old", "refreshToken": "ref"})
+    provider = ClaudeProvider(creds_path=creds)
+    gets = {"n": 0}
+
+    def fake_get(url, headers=None, timeout=None):
+        gets["n"] += 1
+        return FakeResponse(401, {}) if gets["n"] == 1 else FakeResponse(200, claude_usage)
+
+    monkeypatch.setattr(claude_mod.requests, "get", fake_get)
+    # response omits refresh_token -> keep the existing one
+    monkeypatch.setattr(
+        claude_mod.requests, "post", lambda *a, **k: FakeResponse(200, {"access_token": "new-token"})
+    )
+    assert provider.fetch().ok
+    on_disk = json.loads(creds.read_text(encoding="utf-8"))
+    assert on_disk["claudeAiOauth"]["accessToken"] == "new-token"
+    assert on_disk["claudeAiOauth"]["refreshToken"] == "ref"
 
 
 def test_401_refresh_fails(tmp_path, monkeypatch):
